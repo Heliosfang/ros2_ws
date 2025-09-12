@@ -1,0 +1,19 @@
+obstacle_spawner:
+  ros__parameters:
+    inflation_radius: 0.5   # meters
+    carla_host: "127.0.0.1"
+    carla_port: 2000
+    publish_rate_hz: 10.0
+    vehicles:
+      car1:
+        blueprint: "vehicle.audi.tt"
+        x: 223.828125
+        y: 55.040000
+        z: 0.1
+        yaw: 180.0
+      car2:
+        blueprint: "vehicle.audi.tt"
+        x: 153.9022705078125
+        y: 28.38282012939453
+        z: 0.1
+        yaw: -90.0
