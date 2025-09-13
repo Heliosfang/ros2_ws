@@ -95,7 +95,7 @@ class CarlaVehicleSpawner(Node):
         except Exception:
             current_tail = ""
         if current_tail != map_name:
-            self.get_logger().info(f"Loading map: {map_name}")
+            # self.get_logger().info(f"Loading map: {map_name}")
             world = self.client.load_world(map_name)
             world.wait_for_tick()
         else:

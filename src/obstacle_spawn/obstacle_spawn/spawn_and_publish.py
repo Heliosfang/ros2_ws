@@ -83,10 +83,10 @@ class ObstacleSpawner(Node):
             )
             self.world = None
             self.actors: List[carla.Actor] = []
-            if self.inflation_radius > 0.0:
-                self.get_logger().info(
-                    f"(Note) inflation_radius={self.inflation_radius:.3f} m has no effect with zero actors."
-                )
+            # if self.inflation_radius > 0.0:
+            #     self.get_logger().info(
+            #         f"(Note) inflation_radius={self.inflation_radius:.3f} m has no effect with zero actors."
+            #     )
             return
 
         # -------- Connect to CARLA (only if we actually need to spawn) --------
@@ -137,10 +137,10 @@ class ObstacleSpawner(Node):
             self.actors.append(actor)
             self.get_logger().info(f"Spawned [{i+1}]: {actor.type_id} at ({x:.2f},{y:.2f}) yaw={yaw:.1f}")
 
-        if self.inflation_radius > 0.0:
-            self.get_logger().info(f"Inflating bounding boxes by {self.inflation_radius:.3f} m.")
-        else:
-            self.get_logger().info("Publishing original (non-inflated) bounding boxes.")
+        # if self.inflation_radius > 0.0:
+        #     self.get_logger().info(f"Inflating bounding boxes by {self.inflation_radius:.3f} m.")
+        # else:
+        #     self.get_logger().info("Publishing original (non-inflated) bounding boxes.")
 
     # Helper: fetch parameter value if present, else default (no re-declare)
     def _get_param_or(self, name: str, default):

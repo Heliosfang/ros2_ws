@@ -137,7 +137,7 @@ class CarlaVehicleController(Node):
             self.ackermann_sub = self.create_subscription(
                 AckermannDrive, 'carla/ackermann_cmd', self._on_ackermann, qos
             )
-            self.get_logger().info("Ackermann subscriber enabled (ackermann_msgs found).")
+            # self.get_logger().info("Ackermann subscriber enabled (ackermann_msgs found).")
         else:
             self.get_logger().info("ackermann_msgs not available; skipping Ackermann subscriber.")
 
@@ -149,14 +149,14 @@ class CarlaVehicleController(Node):
         # ---------- Timers ----------
         self.resolve_timer = self.create_timer(self.resolve_period, self._try_resolve_vehicle)
 
-        self.get_logger().info(
-            f"Listening for /control_cmd as [steer_rad, "
-            f"{'throttle(0..1)' if self.control_cmd_mode=='steer_throttle' else 'accel(m/s^2)'}"
-            f", brake]; (initial) max_steer_angle_rad={self.max_steer_angle:.3f}, mode='{self.control_cmd_mode}'"
-        )
-        self.get_logger().info(
-            f"Velocity PID topic '{self.vel_topic}' expects Float32MultiArray: [velocity_mps, steer_rad, brake_binary]."
-        )
+        # self.get_logger().info(
+        #     f"Listening for /control_cmd as [steer_rad, "
+        #     f"{'throttle(0..1)' if self.control_cmd_mode=='steer_throttle' else 'accel(m/s^2)'}"
+        #     f", brake]; (initial) max_steer_angle_rad={self.max_steer_angle:.3f}, mode='{self.control_cmd_mode}'"
+        # )
+        # self.get_logger().info(
+        #     f"Velocity PID topic '{self.vel_topic}' expects Float32MultiArray: [velocity_mps, steer_rad, brake_binary]."
+        # )
 
     # ---------------- Vehicle resolution ----------------
     def _try_resolve_vehicle(self):
@@ -262,7 +262,8 @@ class CarlaVehicleController(Node):
         steer_norm = 0.0
         if self.max_steer_angle > 1e-6:
             steer_norm = clamp(steer_rad / self.max_steer_angle, -1.0, 1.0)
-        steer = self._limit_steer_rate(self._normalize_steer(steer_norm))
+        # steer = self._limit_steer_rate(self._normalize_steer(steer_norm))
+        steer = steer_norm
 
         throttle = 0.0
         brake    = 0.0
@@ -363,13 +364,15 @@ class CarlaVehicleController(Node):
         brake_bin = float(msg.data[2]) if len(msg.data) >= 3 else 0.0
         hard_brake = 1.0 if brake_bin >= 0.5 else 0.0
         
-        self.get_logger().info(f"Velocity cmd: v_ref={v_ref:.2f} m/s, steer_rad={steer_rad:.3f}, hard_brake={hard_brake}")
+        # self.get_logger().info(f"Velocity cmd: v_ref={v_ref:.2f} m/s, steer_rad={steer_rad:.3f}, hard_brake={hard_brake}")
 
         # Convert steer rad -> normalized (with rate limit)
         steer_norm = 0.0
         if self.max_steer_angle > 1e-6:
             steer_norm = clamp(steer_rad / self.max_steer_angle, -1.0, 1.0)
-        steer = self._limit_steer_rate(self._normalize_steer(steer_norm))
+        # steer = self._limit_steer_rate(self._normalize_steer(steer_norm))
+        steer = steer_norm
+        
 
         throttle = 0.0
         brake = 0.0

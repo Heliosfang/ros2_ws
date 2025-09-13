@@ -225,21 +225,27 @@ class STM_DRCCLPVMPC:
 
         self.drcc_weight = ca.DM.zeros(1,self.horizon)
         # self.drcc_weight[0,:] = -0.01*ca.linspace(0,1,self.horizon).T
-        self.drcc_weight = -5.0*ca.DM.ones(1,self.horizon)
+        self.drcc_weight = -0.6*ca.DM.ones(1,self.horizon)
         
         self.P = ca.DM.zeros(self.n_states,self.horizon)
         ############## this used for drcc #################
         if usedro:
             # self.P[0,-1] = 20 # sepecify x
             # self.P[0,-1] = 20 # sepecify y
-            self.P[0,:] = 4*ca.DM.ones(1,self.horizon).T # sepecify x
-            self.P[1,:] = 4*ca.DM.ones(1,self.horizon).T # sepecify y
-            # self.P[2,:] = 0.0*ca.linspace(0,1,self.horizon).T # sepecify phi
-            # self.P[3,:] = 0.0*ca.DM.ones(1,self.horizon).T # sepecify ddphi
-            # self.P[4,:] = 0*ca.DM.ones(1,self.horizon).T # sepecify ddelta
+            if self.approx:
+                self.P[0,:] = 4*ca.DM.ones(1,self.horizon).T # sepecify x
+                self.P[1,:] = 4*ca.DM.ones(1,self.horizon).T # sepecify y
+            else:
+                # self.P[0,:] = 4*ca.DM.ones(1,self.horizon).T # sepecify x
+                # self.P[1,:] = 4*ca.DM.ones(1,self.horizon).T # sepecify y
+                self.P[0,:] = ca.linspace(5,6,self.horizon).T # sepecify x
+                self.P[1,:] = ca.linspace(5,6,self.horizon).T # sepecify y
+                # self.P[2,:] = 0.0*ca.linspace(0,1,self.horizon).T # sepecify phi
+                # self.P[3,:] = 0.0*ca.DM.ones(1,self.horizon).T # sepecify ddphi
+                # self.P[4,:] = 0*ca.DM.ones(1,self.horizon).T # sepecify ddelta
             
             self.Q = ca.DM.zeros(self.n_inputs,self.horizon)
-            self.Q[0,:] = 0.3*ca.DM.ones(1,self.horizon)
+            self.Q[0,:] = 0.4*ca.DM.ones(1,self.horizon)
         else:
             self.P[0,-1] = 20 # sepecify x
             self.P[0,-1] = 20 # sepecify y
