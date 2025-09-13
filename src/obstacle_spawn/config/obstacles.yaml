@@ -1,6 +1,6 @@
 obstacle_spawner:
   ros__parameters:
-    inflation_radius: 0.5   # meters
+    inflation_radius: 1.0   # meters
     carla_host: "127.0.0.1"
     carla_port: 2000
     publish_rate_hz: 10.0

@@ -13,13 +13,14 @@ from nav_msgs.srv import GetPlan
 from std_msgs.msg import Float32MultiArray
 
 from drcclpvmpc_ros2.vehicle.carSpec import carSpec
-import threading
+import threading, queue
+import matplotlib.pyplot as plt
 
 from drcclpvmpc_ros2.racecar_path.racecar_path import RacecarPath
 from drcclpvmpc_ros2.obstacles.obstacle_shape import Rectangle_obs
 from drcclpvmpc_ros2.mpc.drcclpvmpc_core import STM_DRCCLPVMPC
 from drcclpvmpc_ros2.dynamics.lpvdynamics import BicycleDynamics
-
+from drcclpvmpc_ros2.racecar_path.utils import plot_path
 
 class DRCCLPVMPCRos2Main(Node):
     def __init__(self):
@@ -30,7 +31,7 @@ class DRCCLPVMPCRos2Main(Node):
         self.dt = all_params['dt_']
         self.wheel_base = all_params['wheel_base']
         self.horizon = all_params.get('horizon_', 6)
-        self.track_width = all_params.get('track_width_', 1.0)
+        self.track_width = all_params.get('track_width_', 4.0)
         self.use_drcc = all_params.get('use_drcc', True)
         self.safe_multiplier = all_params.get('safe_multiplier', 2.0)
 
@@ -55,7 +56,23 @@ class DRCCLPVMPCRos2Main(Node):
         self.drcc_control = None
         self.control_step = 0
         self.reach_end = False
+        self.prev_control = None
+        
+        ################ Ensure continuous phi ##################
+        self.prev_odom_phi = None
+        self.prev_rec_phi = None
+        #########################################################
 
+        self.track_queue = queue.Queue()
+        self.obs_queue = queue.Queue()
+        self.lpvx_queue = queue.Queue()
+        self.lpvy_queue = queue.Queue()
+        self.refx_queue = queue.Queue()
+        self.refy_queue = queue.Queue()
+        self.P_queue = queue.Queue()
+        
+        ###################################################################################
+        ###################################################################################
         # Subscribers
         self.odom_sub = self.create_subscription(Odometry, "/odom", self.odom_callback, 10)
         self.goal_sub = self.create_subscription(PoseStamped, self.goal_topic, self.goal_callback, 10)
@@ -81,9 +98,18 @@ class DRCCLPVMPCRos2Main(Node):
         siny_cosp = 2.0 * (q.w * q.z + q.x * q.y)
         cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
         phi = math.atan2(siny_cosp, cosy_cosp)
+        
+        if self.prev_odom_phi is not None:
+            delta = np.arctan2(np.sin(phi - self.prev_odom_phi), np.cos(phi - self.prev_odom_phi))
+            phi = self.prev_odom_phi + delta
+        self.prev_odom_phi = phi
+        # print("odom phi:", phi)
         vx = msg.twist.twist.linear.x
+        print("vx:", vx)
         vy = msg.twist.twist.linear.y
+        print("vy:", vy)
         omega = msg.twist.twist.angular.z
+        print("omega:", omega)
         with self.lock:
             self.current_state = [x, y, phi, vx, vy, omega]
 
@@ -125,10 +151,11 @@ class DRCCLPVMPCRos2Main(Node):
 
         with self.lock:
             current_state = self.current_state
+            self.P_queue.put(current_state[0:3])
         current_tau = self.track_ptr.xy_to_tau(current_state[:2])
-        current_n = self.track_ptr.f_xy_to_taun(current_state[:2],current_tau)
+        # current_n = self.track_ptr.f_xy_to_taun(current_state[:2],current_tau)
         
-        self.get_logger().debug("current tau is:{current_tau}")
+        # self.get_logger().debug("current tau is:{current_tau}")
 
         try:
             arr = np.asarray(data, dtype=float).reshape(-1, 2) # N*2
@@ -143,8 +170,9 @@ class DRCCLPVMPCRos2Main(Node):
         min_n = np.inf
         s1 = np.inf
         s0 = -np.inf
+        box_num = obs_dm.shape[1] // 4
             
-        for i in range(obs_dm.shape[1]):
+        for i in range(box_num):
             box_i = obs_dm[:,i*4:(i*4)+4]
             min_tau_val = np.inf
             max_tau_val = -np.inf
@@ -189,79 +217,107 @@ class DRCCLPVMPCRos2Main(Node):
             cmd_msg = Float32MultiArray()
             cmd_msg.data = [0.0, 0.0, 1.0]
             self.cmd_pub.publish(cmd_msg)
-        else:
+        elif global_min_tau < np.inf:
             refined_FL = self.track_ptr.f_taun_to_xy(max_tau, max_n)
             refined_FR = self.track_ptr.f_taun_to_xy(max_tau, min_n)
             # refined_RR = self.track_ptr.f_taun_to_xy(min_tau, min_n)
             refined_RL = self.track_ptr.f_taun_to_xy(min_tau, max_n)
-
-            length = ca.hypot(refined_FL[0]-refined_RL[0], refined_FL[1]-refined_RL[1])
-            width = ca.hypot(refined_FL[0]-refined_FR[0], refined_FL[1]-refined_FR[1])
+            
+            # print("refined FL:", refined_FL)
+            # print("refined FR:", refined_FR)
+            # print("refined RL:", refined_RL)
+            length = np.hypot(refined_FL[0]-refined_RL[0], refined_FL[1]-refined_RL[1])
+            width = np.hypot(refined_FL[0]-refined_FR[0], refined_FL[1]-refined_FR[1])
+            
+            # print("obs length:", length, "obs width:", width)
             
             center_tau = (max_tau + min_tau) / 2.0
             center_n = (max_n + min_n) / 2.0
-            center_xy = self.track_ptr.f_taun_to_xy(center_tau, center_n)
+            center_xy = np.array(self.track_ptr.f_taun_to_xy(center_tau, center_n))
             
-            center_phi = self.track_ptr.f_phi(center_tau) * 180 / ca.pi
-            self.rec_obs = Rectangle_obs(center_xy, width, length, center_phi, side_avoid)
-            self.get_logger().info(f"Received obstacle at tau range [{min_tau:.2f}, {max_tau:.2f}] on side {side_avoid}.")
+            center_phi = self.track_ptr.f_phi(center_tau)
+            if self.prev_rec_phi is not None:
+                delta = np.arctan2(np.sin(center_phi - self.prev_rec_phi), np.cos(center_phi - self.prev_rec_phi))
+                center_phi = self.prev_rec_phi + delta
+            self.prev_rec_phi = center_phi
+            self.rec_obs = Rectangle_obs(center_xy, float(width), float(length), center_phi*180/ca.pi, side_avoid)
+            self.obs_queue.put(self.rec_obs)
+            # self.get_logger().info(f"Received obstacle at tau range [{min_tau}, {max_tau}] on side {side_avoid}.")
             
 
-
-        if self.test_bug:
-            self.drcc_success, self.drcc_z0, self.drcc_control = self.controller.get_Updated_local_path(
-                current_state, self.rec_obs, side_avoid, self.safe_multiplier, self.use_drcc
-            )
-            if self.drcc_success:
-                steer = float(self.drcc_control[0,self.control_step])
-                throttle = float(self.drcc_control[1,self.control_step])
-                brake = 0.0
-                cmd_msg = Float32MultiArray()
-                cmd_msg.data = [steer, throttle, brake]
-                self.cmd_pub.publish(cmd_msg)
-                self.get_logger().info(f"Publishing control: steer={steer:.3f}, throttle={throttle:.3f}")
-            self.test_bug = False
-        else:
-            self.drcc_success, self.drcc_z0, self.drcc_control = self.controller.get_Updated_local_path(
-                current_state, self.rec_obs, side_avoid, self.safe_multiplier, self.use_drcc
-            )
-            reference_xyz = self.controller.get_reference_path()
-            reference_x = reference_xyz[0,:]
-            reference_y = reference_xyz[1,:]
-            if not self.drcc_success:
-                self.reach_end = self.controller.get_reach_end()
-                if not self.reach_end:
-                    # try to stop the car by giving a zero signal
-                    self.control_step += 1
-                    if self.drcc_control is not None and self.control_step < self.horizon:
-                        self.get_logger().warn("Fail to solve the optimization problem, use previous feasible solution")
-                        current_control = Float32MultiArray()
-                        current_control.data = [self.drcc_control[0,self.control_step],self.drcc_control[1,self.control_step],0.0]
-                        self.cmd_pub.publish(current_control)
+        with self.lock:
+            if self.test_bug:
+                self.drcc_success, self.drcc_z0, self.drcc_control = self.controller.get_Updated_local_path(
+                    current_state, self.rec_obs, side_avoid, self.safe_multiplier, self.use_drcc
+                )
+                if self.drcc_success:
+                    steer = float(self.drcc_control[0,self.control_step])
+                    throttle = float(self.drcc_control[1,self.control_step])
+                    brake = 0.0
+                    cmd_msg = Float32MultiArray()
+                    cmd_msg.data = [steer, throttle, brake]
+                    self.cmd_pub.publish(cmd_msg)
+                    self.get_logger().info(f"Publishing control: steer={steer:.3f}, throttle={throttle:.3f}")
+                self.test_bug = False
+            else:
+                self.drcc_success, self.drcc_z0, self.drcc_control = self.controller.get_Updated_local_path(
+                    current_state, self.rec_obs, side_avoid, self.safe_multiplier, self.use_drcc
+                )
+                reference_xyz = self.controller.get_reference_path()
+                reference_x = reference_xyz[0,:]
+                reference_y = reference_xyz[1,:]
+                
+                ################### store the local reference path for plot ###########
+                ref_x = np.array(reference_x).transpose()
+                ref_y = np.array(reference_y).transpose()
+                self.refx_queue.put(ref_x)
+                self.refy_queue.put(ref_y)
+                
+                if not self.drcc_success:
+                    self.reach_end = self.controller.get_reach_end()
+                    if not self.reach_end:
+                        # try to stop the car by giving a zero signal
+                        self.control_step += 1
+                        if self.prev_control is not None and self.control_step < self.horizon:
+                            self.get_logger().warn("Fail to solve the optimization problem, use previous feasible solution")
+                            current_control = Float32MultiArray()
+                            current_control.data = [self.prev_control[0,self.control_step],self.prev_control[1,self.control_step],0.0]
+                            self.cmd_pub.publish(current_control)
+                        else:
+                            self.get_logger().warn("Fail to solve the optimization problem and use feasible solution")
+                            current_control = Float32MultiArray()
+                            current_control.data = [0,0,1]
+                            self.cmd_pub.publish(current_control)
                     else:
-                        self.get_logger().warn("Fail to solve the optimization problem and use feasible solution")
+                        self.get_logger().info("Planner reached to the end")
+                        # try to stop the car by giving a zero signal
                         current_control = Float32MultiArray()
                         current_control.data = [0,0,1]
                         self.cmd_pub.publish(current_control)
                 else:
-                    self.get_logger().info("Planner reached to the end")
-                    # try to stop the car by giving a zero signal
+                    self.control_step = 0
+                    self.prev_control = self.drcc_control
+                    drcc_z0 = np.array(self.drcc_z0).squeeze()
+                    drcc_control = np.array(self.drcc_control)
+                    lpv_pvx, lpv_pvy, lpv_pphi, lpv_pdelta = self.controller.get_old_p_param()
+                    lpv_pred_x = self.model.LPV_states(drcc_z0,drcc_control,lpv_pvx,lpv_pvy,lpv_pphi,lpv_pdelta,self.dt)
+                    
+                    ################ store the lpv predicted trajectory for plot ###########
+                    lpv_x = lpv_pred_x[0,:]
+                    lpv_y = lpv_pred_x[1,:]
+                    
+                    self.lpvx_queue.put(lpv_x)
+                    self.lpvy_queue.put(lpv_y)
+                    
+                    new_pvx = lpv_pred_x[3,1:]
+                    new_pvy = lpv_pred_x[4,1:]
+                    new_pphi = lpv_pred_x[2,1:]
+                    self.controller.update_new_p_param(new_pvx,new_pvy,new_pphi)
+                    
                     current_control = Float32MultiArray()
-                    current_control.data = [0,0,1]
+                    current_control.data = [drcc_control[0,self.control_step],drcc_control[1,self.control_step],0.0]
+                    print("steer:", drcc_control[0,self.control_step], "throttle:", drcc_control[1,self.control_step])
                     self.cmd_pub.publish(current_control)
-            else:
-                drcc_z0 = np.array(drcc_z0).squeeze()
-                drcc_control = np.array(drcc_control)
-                lpv_pvx, lpv_pvy, lpv_pphi, lpv_pdelta = self.controller.get_old_p_param()
-                lpv_pred_x = self.model.LPV_states(drcc_z0,drcc_control,lpv_pvx,lpv_pvy,lpv_pphi,lpv_pdelta,self.dt)
-                new_pvx = lpv_pred_x[3,1:]
-                new_pvy = lpv_pred_x[4,1:]
-                new_pphi = lpv_pred_x[2,1:]
-                self.controller.update_new_p_param(new_pvx,new_pvy,new_pphi)
-                
-                current_control = Float32MultiArray()
-                current_control.data = [drcc_control[0,0],drcc_control[1,0],0.0]
-                self.cmd_pub.publish(current_control)
 
     # ------------------- Service response handler -------------------
     def _on_plan_response(self, future):
@@ -282,6 +338,8 @@ class DRCCLPVMPCRos2Main(Node):
         with self.lock:
             latest_path_dm = ca.DM(mat)
             self.track_ptr = RacecarPath(latest_path_dm, DM())
+            # plot_path(self.track_ptr,type=1,labels="reference track")
+            self.track_queue.put(self.track_ptr)
             self.s_max = self.track_ptr.get_max_length()
             start_tau = 1
             start_pt = self.track_ptr.f_taun_to_xy(start_tau, 0.0)
@@ -295,13 +353,161 @@ class DRCCLPVMPCRos2Main(Node):
             self.reach_end = False
             self.initialized = True
         self.get_logger().info(f"Received plan with {N} poses; DM shape = {latest_path_dm.shape}.")
-
-
+        
 def main(args=None):
     rclpy.init(args=args)
+    
+    ###################################################################################
+    ############################ initialize the live plot #############################
+    ax = plt.gca()
+    ax.invert_yaxis()
+    plt.ion()
+    
+    LnS, = ax.plot([], [], 'r',alpha=1,lw=2,label="Trajectory")
+    LnR, = ax.plot([], [], '-b', marker='o', markersize=1, lw=1,label="Local Reference")
+    LnP, = ax.plot([], [], 'g', marker='o', alpha=0.5, markersize=5,label="current position")
+    LnO, = ax.plot([],[],lw =2, color = "tab:blue",label = "Orientation")
+    LnH, = ax.plot([], [], '-g', marker='o', markersize=1, lw=0.5)
+    Lna0, = ax.plot([], [], lw = 1, ls='--', color='black')
+    Lnb1, = ax.plot([], [], lw = 1, ls='--', color='black')
+    
+    
+
+    xylabel_fontsize = 14
+    legend_fontsize = 12
+    xytick_size = 12
+    ax.set_xlabel('x [m]',fontsize = xylabel_fontsize)
+    ax.set_ylabel('y [m]',fontsize = xylabel_fontsize)
+    ax.legend(fontsize=legend_fontsize,borderpad=0.1,labelspacing=0.2, handlelength=1.4, handletextpad=0.37,loc='lower right')
+    ax.tick_params(axis='both',which='major',labelsize = xytick_size)
+    ax.figure.set_size_inches(40, 7.5)
+    ###################################################################################
+    ###################################################################################
     node = DRCCLPVMPCRos2Main()
+    Px_data = []
+    Py_data = []
+    arrowLength = 0.5
+    patch_obs = None
     try:
-        rclpy.spin(node)
+        while rclpy.ok():
+            rclpy.spin_once(node)
+            if patch_obs:
+                patch_obs[0].remove()
+                patch_obs = None
+            refx = None
+            refy = None
+            lpv_x = None
+            lpv_y = None
+            rec_obs = None
+            current_x = None
+            current_y = None
+            current_phi = None
+            a0 = None
+            b1 = None
+            while not node.track_queue.empty():
+                track_ptr = node.track_queue.get()
+                plot_path(track_ptr,type=1,labels="reference track")
+                
+            while not node.obs_queue.empty():
+                rec_obs = node.obs_queue.get()
+                
+            while not node.P_queue.empty():
+                current_P = node.P_queue.get()
+                Px_data.append(current_P[0])
+                Py_data.append(current_P[1])
+                current_x = current_P[0]
+                current_y = current_P[1]
+                current_phi = current_P[2]
+                
+            while not node.refx_queue.empty():
+                refx = node.refx_queue.get()
+                refy = node.refy_queue.get()
+                
+            while not node.lpvx_queue.empty():
+                lpv_x = node.lpvx_queue.get()
+                lpv_y = node.lpvy_queue.get()
+                
+            if rec_obs is not None:
+                x,y = rec_obs.get_rectanglexy()
+                patch_obs = ax.fill(x,y,color='black',zorder=1, alpha=1)
+                
+            if lpv_x is not None:
+                LnH.set_xdata(lpv_x)
+                LnH.set_ydata(lpv_y)
+                
+            if current_x is not None and current_y is not None:
+                LnP.set_xdata([current_x])
+                LnP.set_ydata([current_y])
+                LnO.set_data([current_x, current_x+arrowLength*np.cos(current_phi)],[current_y, current_y+arrowLength*np.sin(current_phi)])
+                
+            if refx is not None:
+                LnR.set_xdata(refx)
+                LnR.set_ydata(refy)
+            LnS.set_xdata(Px_data)
+            LnS.set_ydata(Py_data)
+            
+            ########################## Draw safety region ##########################
+            if node.controller is not None:
+                a_tau = node.controller.get_obs_atau()
+                a_n = node.controller.get_obs_an()
+
+                b_tau = node.controller.get_obs_btau()
+                b_n = node.controller.get_obs_bn()
+
+                tau_0 = node.controller.get_obs_tau0()
+                tau_1 = node.controller.get_obs_tau1()
+            else:
+                a_tau = None
+                a_n = None
+                b_tau = None
+                b_n = None
+                tau_0 = None
+                tau_1 = None
+            ###################################################################################
+            if a_tau is not None and b_tau is not None and tau_0 is not None and tau_1 is not None:
+                if node.controller.reach_end:
+                    Lna0.set_xdata([])
+                    Lna0.set_ydata([])
+                    Lnb1.set_xdata([])
+                    Lnb1.set_ydata([])
+                elif a_n > 0:
+                    safe_ataus = ca.linspace(tau_0, a_tau, 10).T
+
+                    safe_ans = ca.linspace(0, a_n, 10).T
+
+                    safe_axys = node.track_ptr.f_taun_to_xy(safe_ataus,safe_ans)
+
+                    safe_btaus = ca.linspace(b_tau, tau_1, 10).T
+
+                    safe_bns = ca.linspace(b_n, 0, 10).T
+
+                    safe_bxys = node.track_ptr.f_taun_to_xy(safe_btaus,safe_bns)
+
+                else:
+                    safe_ataus = ca.linspace(a_tau, tau_0, 10).T
+
+                    safe_ans = ca.linspace(a_n, 0, 10).T
+
+                    safe_axys = node.track_ptr.f_taun_to_xy(safe_ataus,safe_ans)
+
+                    safe_btaus = ca.linspace(tau_1, b_tau, 10).T
+
+                    safe_bns = ca.linspace(0, b_n, 10).T
+
+                    safe_bxys = node.track_ptr.f_taun_to_xy(safe_btaus,safe_bns)
+                
+                if not node.controller.reach_end:
+                    a0 = np.array(safe_axys)
+                    b1 = np.array(safe_bxys)
+                    
+                    Lna0.set_xdata(a0[0,:])
+                    Lna0.set_ydata(a0[1,:])
+                    Lnb1.set_xdata(b1[0,:])
+                    Lnb1.set_ydata(b1[1,:])
+
+            # ax.relim()
+            # ax.autoscale_view()
+            plt.pause(0.001)
     except KeyboardInterrupt:
         pass
     finally:

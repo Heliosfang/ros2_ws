@@ -95,6 +95,16 @@ class STM_DRCCLPVMPC:
         self.reference_phi = np.unwrap(self.reference_phi)
         self.reference_phi = ca.DM(self.reference_phi)
 
+        self.obs_cons_atau = None
+        self.obs_cons_btau = None
+
+        self.obs_cons_an = None
+        self.obs_cons_bn = None
+
+        self.obs_cons_s0 = None
+        self.obs_cons_s1 = None
+        self.obs_cons_tau0 = None
+        self.obs_cons_tau1 = None
 
         self.get_ref_xyk()
         self.ref_pre_phi = self.reference_phi
@@ -186,26 +196,37 @@ class STM_DRCCLPVMPC:
 
             self.obs_cons_tau0 = self.path_ptr_.s_to_tau_lookup(self.obs_cons_s0)
             self.obs_cons_tau1 = self.path_ptr_.s_to_tau_lookup(self.obs_cons_s1)
+        else:
+            self.obs_cons_atau = None
+            self.obs_cons_btau = None
+
+            self.obs_cons_an = None
+            self.obs_cons_bn = None
+
+            self.obs_cons_s0 = None
+            self.obs_cons_s1 = None
+            self.obs_cons_tau0 = None
+            self.obs_cons_tau1 = None
 
         ############################### initialize weight matrix ###########################################
 
         self.drcc_weight = ca.DM.zeros(1,self.horizon)
         # self.drcc_weight[0,:] = -0.01*ca.linspace(0,1,self.horizon).T
-        self.drcc_weight = -1.0*ca.DM.ones(1,self.horizon)
+        self.drcc_weight = -5.0*ca.DM.ones(1,self.horizon)
         
         self.P = ca.DM.zeros(self.n_states,self.horizon)
         ############## this used for drcc #################
         if usedro:
-            self.P[0,-1] = 20 # sepecify x
-            self.P[0,-1] = 20 # sepecify y
-            # self.P[0,:] = 5*ca.DM.ones(1,self.horizon).T # sepecify x
-            # self.P[1,:] = 5*ca.DM.ones(1,self.horizon).T # sepecify y
+            # self.P[0,-1] = 20 # sepecify x
+            # self.P[0,-1] = 20 # sepecify y
+            self.P[0,:] = 4*ca.DM.ones(1,self.horizon).T # sepecify x
+            self.P[1,:] = 4*ca.DM.ones(1,self.horizon).T # sepecify y
             # self.P[2,:] = 0.0*ca.linspace(0,1,self.horizon).T # sepecify phi
             # self.P[3,:] = 0.0*ca.DM.ones(1,self.horizon).T # sepecify ddphi
             # self.P[4,:] = 0*ca.DM.ones(1,self.horizon).T # sepecify ddelta
             
             self.Q = ca.DM.zeros(self.n_inputs,self.horizon)
-            self.Q[0,:] = 0.8*ca.DM.ones(1,self.horizon)
+            self.Q[0,:] = 0.5*ca.DM.ones(1,self.horizon)
         else:
             self.P[0,-1] = 20 # sepecify x
             self.P[0,-1] = 20 # sepecify y
@@ -302,7 +323,7 @@ class STM_DRCCLPVMPC:
                 if self.tau_arr[0,i] <= self.obs_cons_tau0:
                     continue
                 elif self.tau_arr[0,i] <= self.obs_cons_atau:
-                    collid_n = self.obs_cons_an[j] * (self.path_ptr_.tau_to_s_lookup(self.tau_arr[0,i]) - self.obs_cons_s0)/(self.obs_cons_sa-self.obs_cons_s0)
+                    collid_n = self.obs_cons_an * (self.path_ptr_.tau_to_s_lookup(self.tau_arr[0,i]) - self.obs_cons_s0)/(self.obs_cons_sa-self.obs_cons_s0)
                     shift_n = collid_n + side_avoid*0.1
                     s_a3,s_b3,s_c3 = self.get_safe_line_equation(self.tau_arr[0,i],collid_n,shift_n,self.obs_cons_phi_fre)
                     # self.update_safe_reference_track(i,collid_n,self.obs_cons_phi_fre)
@@ -316,6 +337,8 @@ class STM_DRCCLPVMPC:
                     shift_n = collid_n + side_avoid*0.1
                     s_a3,s_b3,s_c3 = self.get_safe_line_equation(self.tau_arr[0,i],collid_n,shift_n,-self.obs_cons_phi_freb)
                     # self.update_safe_reference_track(i,collid_n,self.obs_cons_phi_freb)
+                else:
+                    continue
 
 
                 a3[0,i] = s_a3
@@ -323,10 +346,10 @@ class STM_DRCCLPVMPC:
                 c3[0,i] = s_c3
         
             collid_n = 0
-            if self.tau_arr[0,0] <= self.obs_cons_atau - (self.obs_cons_atau-self.obs_cons_tau0)*0.1:
+            if (self.tau_arr[0,0] >= self.obs_cons_tau0) and (self.tau_arr[0,0] <= self.obs_cons_atau):
                 collid_n = (self.obs_cons_an) * (self.path_ptr_.tau_to_s_lookup(self.tau_arr[0,-1]) - self.obs_cons_s0)/(self.obs_cons_sa-self.obs_cons_s0)
                 
-            elif self.tau_arr[0,0] <= (self.obs_cons_btau):
+            elif (self.tau_arr[0,0] >= self.obs_cons_atau) and (self.tau_arr[0,0] <= self.obs_cons_btau):
                 if(self.tau_arr[0,-1] <= self.obs_cons_btau):
                     # collid_n = self.obs_cons_bn
                     collid_n = self.obs_cons_bn + (self.obs_cons_an-self.obs_cons_bn)*(self.obs_cons_sb-self.path_ptr_.tau_to_s_lookup(self.tau_arr[0,-1]))/(self.obs_cons_sb-self.obs_cons_sa)
@@ -337,16 +360,22 @@ class STM_DRCCLPVMPC:
             elif self.tau_arr[0,0] >= (self.obs_cons_btau) and self.tau_arr[0,-1] <= self.obs_cons_tau1:
                 collid_n = (self.obs_cons_bn) * (-self.path_ptr_.tau_to_s_lookup(self.tau_arr[0,-1]) + self.obs_cons_s1)/(self.obs_cons_s1-self.obs_cons_sb)
                 
-            phi_fre = ca.atan2(self.n_arr[0,0] - collid_n, self.s_arr[0,-1]-self.s_arr[0,0])
-            collid_n = ca.linspace(self.n_arr[0,0],collid_n,self.horizon+1).T
+            if collid_n != 0:
+                phi_fre = ca.atan2(self.n_arr[0,0] - collid_n, self.s_arr[0,-1]-self.s_arr[0,0])
+                collid_n = ca.linspace(self.n_arr[0,0],collid_n,self.horizon+1).T
                 
-            for i in range(0,self.horizon+1):
-                self.update_safe_reference_track(i,collid_n[0,i],phi_fre)
-
-        if self.reference_phi[0,0] - self.ref_pre_phi[0,1] >= 2*ca.pi-0.5:
-            self.reference_phi -= 2*ca.pi
-        elif self.reference_phi[0,0] - self.ref_pre_phi[0,1] <= -2*ca.pi+0.5:
-            self.reference_phi += 2*ca.pi
+                new_xy = self.path_ptr_.f_taun_to_xy(self.tau_arr,collid_n)
+                self.reference_x = new_xy[0,:]
+                self.reference_y = new_xy[1,:]
+                self.reference_phi += phi_fre
+                
+                # for i in range(0,self.horizon+1):
+                #     self.update_safe_reference_track(i,collid_n[0,i],phi_fre)
+        ############################### unwrap the reference phi #################################
+        # if self.reference_phi[0,0] - self.ref_pre_phi[0,1] >= 2*ca.pi-0.5:
+        #     self.reference_phi -= 2*ca.pi
+        # elif self.reference_phi[0,0] - self.ref_pre_phi[0,1] <= -2*ca.pi+0.5:
+        #     self.reference_phi += 2*ca.pi
         
         self.ref_pre_phi = self.reference_phi
         self.ref_pre_x = self.reference_x
@@ -897,7 +926,7 @@ class STM_DRCCLPVMPC:
         if self.approx:
             opti.subject_to(opti.bounded(self.min_acc, Aau@z, self.max_acc))
         else:
-            opti.subject_to(opti.bounded(-0.1, Aau@z, 0.50))
+            opti.subject_to(opti.bounded(0.4, Aau@z, 1.0))
         opti.subject_to(opti.bounded(self.min_steer, Adu@z , self.max_steer))
 
         ###################################### minimize the objective function ##########################################
@@ -1054,6 +1083,7 @@ class STM_DRCCLPVMPC:
         self.tau_arr = self.path_ptr_.s_to_tau_lookup(self.s_arr)
 
         self.ref_pre_phi = self.path_ptr_.f_phi(self.tau_arr)
+        
 
         # n_arr = ca.DM.zeros(1,self.horizon+1)
         
@@ -1061,13 +1091,22 @@ class STM_DRCCLPVMPC:
         
         # n_arr = ca.linspace(x0_n, 0, self.horizon+1).T
         n0 = self.path_ptr_.f_xy_to_taun(x0[:2],tau0)
-        # print("n0 :",n0)
+
         self.n_arr = ca.linspace(n0,0,self.horizon+1).T
+        # print("n arr:",self.n_arr)
+        
         phi_fre = ca.atan2(n0,st-s0)
 
         self.ref_xy = self.path_ptr_.f_taun_to_xy(self.tau_arr,self.n_arr)
+        # print("ref xy:",self.ref_xy)
         # phi_free = ca.atan(x0_n,st-s0)
-        self.reference_phi = self.path_ptr_.f_phi(self.tau_arr) + phi_fre
+        track_phi = self.path_ptr_.f_phi(self.tau_arr)
+        track_phi[0,0] = x0[2]
+        for i in range(1,self.horizon+1):
+            delta = ca.arctan2(ca.sin(track_phi[0,i]-track_phi[0,i-1]),ca.cos(track_phi[0,i]-track_phi[0,i-1]))
+            track_phi[0,i] = track_phi[0,i-1] + delta
+        self.reference_phi = track_phi + phi_fre
+        # print("ref phi:",self.reference_phi)
         self.reference_x = self.ref_xy[0,:]
         self.reference_y = self.ref_xy[1,:]
 

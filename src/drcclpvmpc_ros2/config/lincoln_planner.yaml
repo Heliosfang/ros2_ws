@@ -2,7 +2,7 @@ drcclpvmpc_main:
   ros__parameters:
     dt_: 0.05
     horizon_: 6
-    track_width_: 8.0
+    track_width_: 4.0
     use_drcc: true
     control_type: "pwm"  # 'pwm'|'acc'
     # Below are parameters for the specific vehicle model
@@ -13,42 +13,42 @@ drcclpvmpc_main:
     g: 9.81
     wheel_base: 1.45
     # Below are parameters for the vehicle MF tire model
-    Bf: 14.3423
-    Cf: 1.2712
-    Df: 4.0620
+    Bf: 10.668
+    Cf: 1.104
+    Df: 9.996
 
-    Br: 36.9947
-    Cr: 4.7291
-    Dr: 9.0861
+    Br: 2.559
+    Cr: 2.60
+    Dr: 19.855
 
-    Caf: 74.06
-    Car: 1589.63
+    Caf: 117.69
+    Car: 132.12
     # Below are parameters for the drivetrain model
-    Cm1: 6725.5478
-    Cm2: 25.9941
-    Cr0: 187.1197
-    Cd: 1.4338
+    Cm1: 381.568
+    Cm2: 688.387
+    Cr0: 180.07
+    Cd: 19.64
 
     # Below are parameters for the control limits
-    max_steer: 25  # [deg]
-    min_steer: -25 # [deg]
+    max_steer: 70  # [deg]
+    min_steer: -70 # [deg]
 
-    max_vy: 3.0     # [m/s]
-    min_vy: -6.0    # [m/s]
+    max_vy: 10.0     # [m/s]
+    min_vy: -10.0    # [m/s]
 
-    max_vx: 8.0    # [m/s]
+    max_vx: 10.0    # [m/s]
     min_vx: 0.0     # [m/s]
 
     max_acc: 3.0     # [m/s^2]
     min_acc: -6.0    # [m/s^2]
 
-    max_omega: 30  # [rad/s]
-    min_omega: -30 # [rad/s]
+    max_omega: 50  # [rad/s]
+    min_omega: -50 # [rad/s]
 
     # Below are parameters for the global path service name
     service_name: "get_path_from_txt"
     goal_topic: "/goal_pose"
 
     # Below defines the safety distance to the obstacle: safe_multiplier * max_vx
-    safe_multiplier: 2.0
+    safe_multiplier: 1.5
 

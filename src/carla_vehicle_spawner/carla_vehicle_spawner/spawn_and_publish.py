@@ -174,7 +174,7 @@ class CarlaVehicleSpawner(Node):
 
         lidar_tf = carla.Transform(carla.Location(x=0.0, z=2.5))
         self.lidar = self.world.spawn_actor(lidar_bp, lidar_tf, attach_to=self.vehicle)
-        self.lidar.listen(self.publish_lidar)
+        # self.lidar.listen(self.publish_lidar)
 
         # ---- Camera (optional) ----
         self.camera = None
@@ -186,7 +186,7 @@ class CarlaVehicleSpawner(Node):
             cam_bp.set_attribute('sensor_tick',  str(self.get_parameter("camera_sensor_tick").value))
             cam_tf = carla.Transform(carla.Location(x=1.5, z=2.4))
             self.camera = self.world.spawn_actor(cam_bp, cam_tf, attach_to=self.vehicle)
-            self.camera.listen(self.publish_camera)
+            # self.camera.listen(self.publish_camera)
 
         # ---- Spectator follow (smooth & synced) ----
         self._spec_loc_filt = None  # np.array([x,y,z])

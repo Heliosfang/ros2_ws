@@ -154,6 +154,9 @@ class Rectangle_obs:
             x, y = rectangle.exterior.xy
 
             ax.fill(x,y,color='black',zorder=1, alpha=1)
+            
+    def get_rectanglexy(self):
+        return self.rectangle_obs[0].exterior.xy
 
     def get_line_equation(self, p1, p2):
         """

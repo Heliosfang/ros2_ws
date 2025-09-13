@@ -9,7 +9,7 @@ setup(
     data_files=[
     ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
     ('share/' + package_name, ['package.xml']),
-    ('share/' + package_name + '/output', []),   # ensure output/ exists in install space
+    ('share/' + package_name + '/output', ['output/bspline.txt']),   # ensure output/ exists in install space
     ],
 
     install_requires=['setuptools'],

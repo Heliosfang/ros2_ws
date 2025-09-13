@@ -200,7 +200,7 @@ def main():
     parser.add_argument("--bp-index", type=int, default=0)
 
     parser.add_argument("--out", default="carla_vehicle_log.csv")
-    parser.add_argument("--max-steer-rad", type=float, default=0.6,
+    parser.add_argument("--max-steer-rad", type=float, default=1.222,
                         help="assumed max steering angle (rad) for converting steer_norm -> steering_angle_rad")
     parser.add_argument("--overwrite", action="store_true",
                         help="overwrite existing CSV instead of appending")
