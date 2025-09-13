@@ -64,13 +64,23 @@ carla_vehicle_controller:
     # Steering normalization & slew limit
     steer_saturation: 1.0
     steer_rate_limit: 2.0
-    max_steer_angle_rad: 0.6        # NEW: steer_rad / this → steer_norm in [-1,1]
+    max_steer_angle_rad: 1.222        # steer_rad / this → steer_norm in [-1,1]
 
-    # How to interpret /control_cmd data=[steer_rad, second]:
+    # How to interpret /control_cmd data=[steer_rad, second, brake]:
     #  - "steer_throttle": second = throttle in [0,1] (default)
     #  - "steer_accel":    second = accel in m/s^2 (mapped to throttle/brake)
-    control_cmd_mode: "steer_throttle"   # NEW
+    control_cmd_mode: "steer_throttle"
 
     # Vehicle resolution
     resolve_period_sec: 0.5
     log_every_n_resolves: 10
+
+    # === NEW: velocity PID control ===
+    velocity_cmd_topic: "/velocity_cmd"   # Float32MultiArray: [velocity_mps, steer_rad, brake_binary]
+
+    speed_pid_kp: 0.8
+    speed_pid_ki: 0.2
+    speed_pid_kd: 0.05
+    speed_pid_i_max: 0.5                  # integral clamp
+    speed_pid_throttle_max: 1.0           # throttle clamp
+    speed_pid_alpha: 0.2                  # EMA smoothing for measured speed

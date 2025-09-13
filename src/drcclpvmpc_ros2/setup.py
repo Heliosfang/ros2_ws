@@ -12,12 +12,15 @@ setup(
         ('share/' + package_name, ['package.xml']),
         ('share/' + package_name + '/launch', ['launch/drcclpvmpc_planner.launch.py']),
         ('share/' + package_name + '/config', ['config/lincoln_planner.yaml']),
+        ('share/' + package_name + '/config', ['config/planner_view.rviz']),
         ('lib/' + 'python3.12/' + 'site-packages/' + package_name + '/mpc' +
          '/data', [package_name + '/mpc/data/model_error.csv']),
         ('lib/' + 'python3.12/' + 'site-packages/' + package_name + '/mpc' +
          '/data', [package_name + '/mpc/data/z_states.csv']),
         ('lib/' + 'python3.12/' + 'site-packages/' + package_name + '/mpc' +
          '/data', [package_name + '/mpc/data/noise_arr.npy']),
+        ('lib/' + 'python3.12/' + 'site-packages/' + package_name + '/mpc' +
+         '/data', [package_name + '/mpc/data/noise_arrvx.npy']),
         ('lib/' + 'python3.12/' + 'site-packages/' + package_name + '/mpc' +
          '/output', [package_name + '/mpc/output/DynamicDRO_solver_output.txt']),
         

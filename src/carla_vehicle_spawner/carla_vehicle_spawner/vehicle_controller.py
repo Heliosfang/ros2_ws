@@ -33,7 +33,7 @@ class CarlaVehicleController(Node):
         self.declare_parameter('vehicle_blueprint', 'vehicle.lincoln.mkz')
         self.declare_parameter('vehicle_blueprint_index', 0)
 
-        # Mapping from accel (m/s^2) -> throttle/brake
+        # Mapping from accel (m/s^2) -> throttle/brake (legacy path)
         self.declare_parameter('accel_to_throttle_gain', 0.25)   # throttle ≈ gain * accel (clip to [0,1])
         self.declare_parameter('accel_to_brake_gain',   0.30)    # brake    ≈ gain * |accel|
         self.declare_parameter('deadband_accel',        0.05)    # |accel| below this → neither throttle nor brake
@@ -42,11 +42,22 @@ class CarlaVehicleController(Node):
         self.declare_parameter('steer_saturation', 1.0)          # expected steer_norm range
         self.declare_parameter('steer_rate_limit',  2.0)         # max change per second in steer command (abs), in normalized units
 
-        # How to interpret /control_cmd data=[steer_rad, throttle_or_accel]
-        #  - "steer_throttle": throttle in [0,1] (no brake)
+        # How to interpret /control_cmd data=[steer_rad, throttle_or_accel, brake]
+        #  - "steer_throttle": throttle in [0,1] (brake provided directly in msg[2])
         #  - "steer_accel":    accel in m/s^2  (mapped to throttle/brake)
         self.declare_parameter('control_cmd_mode', 'steer_throttle')
-        self.declare_parameter('max_steer_angle_rad', 0.6)       # fallback if CARLA physics not available
+        self.declare_parameter('max_steer_angle_rad', 1.222)       # fallback if CARLA physics not available
+
+        # NEW: Velocity command subscriber (Float32MultiArray: [velocity_mps, steer_rad, brake_binary])
+        self.declare_parameter('velocity_cmd_topic', '/velocity_cmd')
+
+        # NEW: PID gains for longitudinal speed control
+        self.declare_parameter('speed_pid_kp', 0.8)
+        self.declare_parameter('speed_pid_ki', 0.2)
+        self.declare_parameter('speed_pid_kd', 0.05)
+        self.declare_parameter('speed_pid_i_max', 0.5)           # integral clamp (absolute)
+        self.declare_parameter('speed_pid_throttle_max', 1.0)    # throttle clamp
+        self.declare_parameter('speed_pid_alpha', 0.2)           # EMA for speed smoothing (0..1); 0 = no smoothing
 
         # Retry behavior
         self.declare_parameter('resolve_period_sec', 0.5)
@@ -76,6 +87,19 @@ class CarlaVehicleController(Node):
         self._resolve_attempts = 0
         self._vehicle_found    = False
 
+        # Velocity PID params/state
+        self.vel_topic         = str(self.get_parameter('velocity_cmd_topic').value)
+        self.kp = float(self.get_parameter('speed_pid_kp').value)
+        self.ki = float(self.get_parameter('speed_pid_ki').value)
+        self.kd = float(self.get_parameter('speed_pid_kd').value)
+        self.i_max = float(self.get_parameter('speed_pid_i_max').value)
+        self.throttle_max = float(self.get_parameter('speed_pid_throttle_max').value)
+        self.alpha = float(self.get_parameter('speed_pid_alpha').value)
+        self._i_term = 0.0
+        self._prev_err = 0.0
+        self._prev_speed = None
+        self._pid_prev_time = None
+
         # State
         self.vehicle = None
         self.prev_time = None
@@ -99,7 +123,7 @@ class CarlaVehicleController(Node):
         # ---------- Subscribers ----------
         qos = QoSProfile(depth=10)
 
-        # Subscribe to your combined control topic: [steer_rad, throttle_or_accel]
+        # Combined control topic: [steer_rad, throttle_or_accel, brake]
         self.ctrl_sub = self.create_subscription(
             Float32MultiArray, '/control_cmd', self._on_control_cmd, qos
         )
@@ -117,12 +141,21 @@ class CarlaVehicleController(Node):
         else:
             self.get_logger().info("ackermann_msgs not available; skipping Ackermann subscriber.")
 
+        # NEW: Velocity command subscriber: [velocity_mps, steer_rad, brake_binary]
+        self.vel_sub = self.create_subscription(
+            Float32MultiArray, self.vel_topic, self._on_velocity_cmd, qos
+        )
+
         # ---------- Timers ----------
         self.resolve_timer = self.create_timer(self.resolve_period, self._try_resolve_vehicle)
 
         self.get_logger().info(
-            f"Listening for /control_cmd as [steer_rad, {'throttle(0..1)' if self.control_cmd_mode=='steer_throttle' else 'accel(m/s^2)'}]; "
-            f"(initial) max_steer_angle_rad={self.max_steer_angle:.3f}, mode='{self.control_cmd_mode}'"
+            f"Listening for /control_cmd as [steer_rad, "
+            f"{'throttle(0..1)' if self.control_cmd_mode=='steer_throttle' else 'accel(m/s^2)'}"
+            f", brake]; (initial) max_steer_angle_rad={self.max_steer_angle:.3f}, mode='{self.control_cmd_mode}'"
+        )
+        self.get_logger().info(
+            f"Velocity PID topic '{self.vel_topic}' expects Float32MultiArray: [velocity_mps, steer_rad, brake_binary]."
         )
 
     # ---------------- Vehicle resolution ----------------
@@ -166,6 +199,12 @@ class CarlaVehicleController(Node):
         self.prev_time = time.time()
         self.prev_steer = 0.0
 
+        # reset PID state when a new vehicle is bound
+        self._i_term = 0.0
+        self._prev_err = 0.0
+        self._prev_speed = None
+        self._pid_prev_time = None
+
         self.get_logger().info(
             f"Controlling vehicle id={v.id}, type={v.type_id}, role_name='{v.attributes.get('role_name','')}'"
         )
@@ -203,11 +242,12 @@ class CarlaVehicleController(Node):
     # ---------------- Command handlers ----------------
     def _on_control_cmd(self, msg: Float32MultiArray):
         """
-        Expect data = [steer_rad, throttle_or_accel]
+        Expect data = [steer_rad, throttle_or_accel, brake]
         - steer_rad: steering angle in radians (positive = left)
         - throttle_or_accel: behavior depends on 'control_cmd_mode':
-            * 'steer_throttle': throttle in [0,1], no brake
+            * 'steer_throttle': throttle in [0,1]
             * 'steer_accel':    accel in m/s^2 (mapped to throttle/brake)
+        - brake: [0,1]
         """
         if self.vehicle is None or not self._is_actor_alive(self.vehicle):
             return
@@ -216,7 +256,7 @@ class CarlaVehicleController(Node):
 
         steer_rad = float(msg.data[0])
         second    = float(msg.data[1])
-        brake    = float(msg.data[2])
+        brake_in  = float(msg.data[2])
 
         # Convert rad -> normalized steer
         steer_norm = 0.0
@@ -225,13 +265,18 @@ class CarlaVehicleController(Node):
         steer = self._limit_steer_rate(self._normalize_steer(steer_norm))
 
         throttle = 0.0
-        # brake = 0.0
+        brake    = 0.0
         if self.control_cmd_mode == 'steer_accel':
             throttle, brake = self._accel_to_tb(second)  # treat as accel m/s^2
+            # allow incoming brake to override
+            brake = max(brake, clamp(brake_in, 0.0, 1.0))
+            if brake > 0.0:
+                throttle = 0.0
         else:
-            # 'steer_throttle' → treat as normalized throttle [0,1]
             throttle = clamp(second, 0.0, 1.0)
-            brake = clamp(brake, 0.0, 1.0)
+            brake    = clamp(brake_in, 0.0, 1.0)
+            if brake > 0.0:
+                throttle = 0.0
 
         ctrl = carla.VehicleControl(
             throttle=throttle,
@@ -281,11 +326,95 @@ class CarlaVehicleController(Node):
         steer_angle = float(msg.steering_angle) if hasattr(msg, 'steering_angle') else 0.0
 
         # Use dynamically detected max steer angle (fallback to 0.6 rad if unknown)
-        assumed_max_rad = self.max_steer_angle if self.max_steer_angle > 1e-6 else 0.6
+        assumed_max_rad = self.max_steer_angle if self.max_steer_angle > 1e-6 else 1.222
         steer_norm = clamp(steer_angle / assumed_max_rad, -1.0, 1.0)
 
         throttle, brake = self._accel_to_tb(accel)
         steer = self._limit_steer_rate(self._normalize_steer(steer_norm))
+
+        ctrl = carla.VehicleControl(
+            throttle=throttle,
+            steer=steer,
+            brake=brake,
+            reverse=self.reverse,
+            hand_brake=False,
+            manual_gear_shift=False
+        )
+        try:
+            self.vehicle.apply_control(ctrl)
+        except Exception as e:
+            self.get_logger().warn(f"apply_control failed: {e}")
+
+    # -------- NEW: Velocity (speed) command handler with PID ----------
+    def _on_velocity_cmd(self, msg: Float32MultiArray):
+        """
+        Expect Float32MultiArray: [velocity_mps, steer_rad, brake_binary]
+        - velocity_mps: target forward speed in m/s (>=0)
+        - steer_rad:    steering angle in radians
+        - brake_binary: 1 -> hard brake (full), 0 -> normal PID control (no service brake used)
+        """
+        if self.vehicle is None or not self._is_actor_alive(self.vehicle):
+            return
+        if not msg.data or len(msg.data) < 2:
+            return
+
+        v_ref = max(0.0, float(msg.data[1]))
+        steer_rad = float(msg.data[0])
+        brake_bin = float(msg.data[2]) if len(msg.data) >= 3 else 0.0
+        hard_brake = 1.0 if brake_bin >= 0.5 else 0.0
+        
+        self.get_logger().info(f"Velocity cmd: v_ref={v_ref:.2f} m/s, steer_rad={steer_rad:.3f}, hard_brake={hard_brake}")
+
+        # Convert steer rad -> normalized (with rate limit)
+        steer_norm = 0.0
+        if self.max_steer_angle > 1e-6:
+            steer_norm = clamp(steer_rad / self.max_steer_angle, -1.0, 1.0)
+        steer = self._limit_steer_rate(self._normalize_steer(steer_norm))
+
+        throttle = 0.0
+        brake = 0.0
+
+        if hard_brake > 0.0:
+            # Hard brake overrides everything (no throttle)
+            throttle = 0.0
+            brake = 1.0
+            # reset PID state so we don't wind up
+            self._i_term = 0.0
+            self._prev_err = 0.0
+            self._pid_prev_time = time.time()
+        else:
+            # Compute current speed (m/s) from CARLA velocity vector
+            try:
+                vel = self.vehicle.get_velocity()
+                speed = math.sqrt(vel.x*vel.x + vel.y*vel.y + vel.z*vel.z)
+            except Exception:
+                speed = 0.0
+
+            # Optional smoothing (EMA)
+            if self._prev_speed is None:
+                smooth_speed = speed
+            else:
+                a = clamp(self.alpha, 0.0, 1.0)
+                smooth_speed = (1.0 - a) * self._prev_speed + a * speed
+            self._prev_speed = smooth_speed
+
+            # PID update
+            now = time.time()
+            if self._pid_prev_time is None:
+                self._pid_prev_time = now
+            dt = max(1e-3, now - self._pid_prev_time)
+            self._pid_prev_time = now
+
+            err = v_ref - smooth_speed
+            self._i_term = clamp(self._i_term + err * dt, -self.i_max, self.i_max)
+            d_term = (err - self._prev_err) / dt if dt > 0.0 else 0.0
+            self._prev_err = err
+
+            u = self.kp * err + self.ki * self._i_term + self.kd * d_term
+            self.get_logger().info(f"  Speed={smooth_speed:.2f} m/s, err={err:.2f}, u={u:.3f}, i_term={self._i_term:.3f}")
+            # throttle only (no service brake for negative error)
+            throttle = clamp(u, 0.0, self.throttle_max)
+            brake = 0.0  # never apply brake here; we only coast when err<0
 
         ctrl = carla.VehicleControl(
             throttle=throttle,

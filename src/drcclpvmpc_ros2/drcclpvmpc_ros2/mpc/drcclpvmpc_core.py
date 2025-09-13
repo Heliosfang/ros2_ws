@@ -9,6 +9,7 @@ import os
 import time as tm
 
 from drcclpvmpc_ros2.mpc.model_noise import Model_noise
+from drcclpvmpc_ros2.mpc.model_noisevx import Model_noiseVx
 from drcclpvmpc_ros2.obstacles.obstacle_shape import Rectangle_obs
 from drcclpvmpc_ros2.racecar_path.racecar_path import RacecarPath
 
@@ -53,7 +54,10 @@ class STM_DRCCLPVMPC:
         
         self.approx = params['approx']
         
-        self.n_states = 6 # x, y, phi, vx, vy, omega
+        if self.approx:
+            self.n_states = 5 # x, y, phi, vy, omega
+        else:
+            self.n_states = 6 # x, y, phi, vx, vy, omega
         self.n_inputs = 2 # steer, vx
         
         self.g = params['g'] # gravity acc
@@ -115,19 +119,28 @@ class STM_DRCCLPVMPC:
         self.epsilon = 0.10 # episilon
 
         ################################## initialize schedualing params####################################
-        self.p_vx = self.v_arr[1:,0].T
-        self.p_vy = ca.DM.zeros(1,self.horizon)
-        self.p_phi = self.ref_pre_phi[0,1:]
-        self.p_delta = ca.DM.zeros(1,self.horizon)
+        if self.approx:
+            self.p_vx = self.v_arr[1:,0].T
+            self.p_phi = self.ref_pre_phi[0,1:]
+            
+            self.past_pvx = self.p_vx
+            self.past_pphi = self.p_phi
+        else:
+            self.p_vx = self.v_arr[1:,0].T
+            self.p_vy = ca.DM.zeros(1,self.horizon)
+            self.p_phi = self.ref_pre_phi[0,1:]
+            self.p_delta = ca.DM.zeros(1,self.horizon)
 
-        self.past_pvx = self.p_vx
-        self.past_pvy = self.p_vy
-        self.past_pphi = self.p_phi
-        self.past_pdelta = self.p_delta
+            self.past_pvx = self.p_vx
+            self.past_pvy = self.p_vy
+            self.past_pphi = self.p_phi
+            self.past_pdelta = self.p_delta
 
         ################################# initialize noise matrix ###########################################
-
-        self.model_noise = Model_noise(self.horizon,fix_noise)
+        if self.approx:
+            self.model_noise = Model_noiseVx(self.horizon,fix_noise)
+        else:
+            self.model_noise = Model_noise(self.horizon,fix_noise)
         self.noise_arr = self.model_noise.get_noise_arr()
         
         self.save_fixed_noise()
@@ -182,8 +195,8 @@ class STM_DRCCLPVMPC:
             self.obs_cons_sa = self.path_ptr_.tau_to_s_lookup(self.obs_cons_atau)
             self.obs_cons_sb = self.path_ptr_.tau_to_s_lookup(self.obs_cons_btau)
             
-            obs_safe_dis = self.max_vx * safe_multiplier
-            obs_safe_disb = self.max_vx * safe_multiplier
+            obs_safe_dis = self.max_vx * safe_multiplier * self.horizon * self.dt
+            obs_safe_disb = self.max_vx * safe_multiplier * self.horizon * self.dt
             
             obs_safe_dis = min(obs_safe_dis,float(self.obs_cons_sa)-1.0)
             obs_safe_disb = min(obs_safe_disb,float(self.s_max - self.obs_cons_sb-1.0))
@@ -226,7 +239,7 @@ class STM_DRCCLPVMPC:
             # self.P[4,:] = 0*ca.DM.ones(1,self.horizon).T # sepecify ddelta
             
             self.Q = ca.DM.zeros(self.n_inputs,self.horizon)
-            self.Q[0,:] = 0.5*ca.DM.ones(1,self.horizon)
+            self.Q[0,:] = 0.3*ca.DM.ones(1,self.horizon)
         else:
             self.P[0,-1] = 20 # sepecify x
             self.P[0,-1] = 20 # sepecify y
@@ -247,20 +260,32 @@ class STM_DRCCLPVMPC:
         if optimized_path[0]:
             print("Solve Success, time: {:.8f}".format(self.end-self.start))
 
-            op_z0 = np.array(optimized_path[1][0])
+            if not self.approx:
+                op_z0 = np.array(optimized_path[1][0])
+                op_delta = np.array(optimized_path[1][1][0,:]).squeeze().tolist()
+                op_throttle = np.array(optimized_path[1][1][1,:]).squeeze().tolist()
 
-            op_delta = np.array(optimized_path[1][1][0,:]).squeeze().tolist()
-            op_throttle = np.array(optimized_path[1][1][1,:]).squeeze().tolist()
+                ############################## update schedualing params ##########################
+                self.past_pvx = self.p_vx
+                self.past_pvy = self.p_vy
+                self.past_pphi = self.p_phi
+                self.past_pdelta = self.p_delta
+                
+                self.p_delta = ca.DM(op_delta).T
 
-            ############################## update schedualing params ##########################
-            self.past_pvx = self.p_vx
-            self.past_pvy = self.p_vy
-            self.past_pphi = self.p_phi
-            self.past_pdelta = self.p_delta
-            
-            self.p_delta = ca.DM(op_delta).T
+                return optimized_path[0],DM(op_z0),tuple((DM(op_delta),DM(op_throttle)))
+            else:
+                op_z0 = np.array(optimized_path[1][0])
+                op_delta = np.array(optimized_path[1][1][0,:]).squeeze().tolist()
+                op_vx = np.array(optimized_path[1][1][1,:]).squeeze().tolist()
+                
+                ############################## update schedualing params ##########################
 
-            return optimized_path[0],DM(op_z0),tuple((DM(op_delta),DM(op_throttle)))
+                self.past_pvx = self.p_vx
+                self.past_pphi = self.p_phi
+                self.p_vx = ca.DM(op_vx).T
+
+                return optimized_path[0],DM(op_z0),tuple((DM(op_delta),DM(op_vx)))
         else:
             if self.reach_end:
                 print("################################")
@@ -275,9 +300,13 @@ class STM_DRCCLPVMPC:
 
         casadi_option = {"print_time":print_}
 
-        self.current_state = ca.DM([current_state[0],current_state[1],
-                    current_state[2],current_state[3],
-                    current_state[4],current_state[5]]) 
+        if self.approx:
+            self.current_state = ca.DM([current_state[0],current_state[1],
+            current_state[2],current_state[3], current_state[4]]) 
+        else:
+            self.current_state = ca.DM([current_state[0],current_state[1],
+                        current_state[2],current_state[3],
+                        current_state[4],current_state[5]]) 
 
         ############################### get reference path #################################
         getxy = self.get_ref_xy(current_state)
@@ -289,15 +318,16 @@ class STM_DRCCLPVMPC:
         # now self.reference_xy, self.reference_x, self.reference_y, self.reference_phi is updated
 
         # unwrap the reference phi for continuous concern
-        self.reference_phi = np.array(self.reference_phi)
-        self.reference_phi = np.unwrap(self.reference_phi)
-        self.reference_phi = ca.DM(self.reference_phi)
+        # self.reference_phi = np.array(self.reference_phi)
+        # self.reference_phi = np.unwrap(self.reference_phi)
+        # self.reference_phi = ca.DM(self.reference_phi)
 
         if getxy is False:
             return False
         self.get_ref_xyk()
         # update previous reference phi, x, y
-        self.reference_vx = self.v_arr[:self.horizon+1,0].T
+        if not self.approx:
+            self.reference_vx = self.v_arr[:self.horizon+1,0].T
         # self.reference_vy = (ykpre - self.ykpre)/self.dt
         self.reference_vy = ca.DM.zeros(1,self.horizon+1)
 
@@ -385,18 +415,27 @@ class STM_DRCCLPVMPC:
 
         # alphaf = self.p_delta - (self.p_vy+self.lf*self.p_omega)/self.p_vx
         # alphar = (self.lr*self.p_omega-self.p_vy)/self.p_vx
-        A33 = self.A33()
-        A34 = self.A34()
-        A35 = self.A35()
-        A44 = self.A44()
-        A45 = self.A45()
-        A54 = self.A54()
-        A55 = self.A55()
+        if self.approx:
+            A33 = self.A33()
+            A34 = self.A34()
+            A43 = self.A43()
+            A44 = self.A44()
 
-        B30 = self.B30()
-        B31 = self.B31()
-        B40 = self.B40()
-        B50 = self.B50()
+            B30 = self.B30()
+            B40 = self.B40()
+        else:
+            A33 = self.A33()
+            A34 = self.A34()
+            A35 = self.A35()
+            A44 = self.A44()
+            A45 = self.A45()
+            A54 = self.A54()
+            A55 = self.A55()
+
+            B30 = self.B30()
+            B31 = self.B31()
+            B40 = self.B40()
+            B50 = self.B50()
         ##################################### define objective function ################################
 
         opti = ca.Opti('conic')
@@ -404,38 +443,40 @@ class STM_DRCCLPVMPC:
         z = opti.variable(self.n_states + self.n_inputs*self.horizon,1)
 
         ################### calculate the list of A and B #########################
-
-        A_ls = []
-        B_ls = []
-        C_ls = []
+        if self.approx:
+            A_ls = []
+            B_ls = []
+        else:
+            A_ls = []
+            B_ls = []
+            C_ls = []
         
-        C_k = ca.DM.zeros(self.n_states,1)
-        C_k[3,0] = -self.Cr0/self.mass
-        C_k = C_k * self.dt
+            C_k = ca.DM.zeros(self.n_states,1)
+            C_k[3,0] = -self.Cr0/self.mass
+            C_k = C_k * self.dt
 
         for i in range(self.horizon):
             if self.approx:
                 A_i = ca.DM.zeros(self.n_states,self.n_states)
-                A_i[0,3] = ca.cos(self.p_phi[0,i])
-                A_i[0,4] = -ca.sin(self.p_phi[0,i])
-                A_i[1,3] = ca.sin(self.p_phi[0,i])
-                A_i[1,4] = ca.cos(self.p_phi[0,i])
-                A_i[2,5] = 1
+                A_i[0,3] = -ca.sin(self.p_phi[0,i])
+                A_i[1,3] = ca.cos(self.p_phi[0,i])
+                A_i[2,4] = 1
+                A_i[3,3] = A33[0,i]
                 A_i[3,4] = A34[0,i]
-                A_i[3,5] = A35[0,i]
+                A_i[4,3] = A43[0,i]
                 A_i[4,4] = A44[0,i]
-                A_i[4,5] = A45[0,i]
-                A_i[5,4] = A54[0,i]
-                A_i[5,5] = A55[0,i]
 
                 B_i = ca.DM.zeros(self.n_states,self.n_inputs)
-                B_i[3,1] = 1
-                B_i[3,0] = B30[0,i]
-                B_i[4,0] = B40[0,i]
-                B_i[5,0] = B50[0,i]
+                B_i[0,1] = ca.cos(self.p_phi[0,i])
+                B_i[1,1] = ca.sin(self.p_phi[0,i])
+                B_i[3,0] = B30
+                B_i[4,0] = B40
 
                 A_i = ca.diag(ca.DM.ones(self.n_states)) + A_i*self.dt
                 B_i = B_i * self.dt
+                
+                A_ls.append(A_i) # A0, A1, ...
+                B_ls.append(B_i) # B0, B1, ...
             else:
                 A_i = ca.DM.zeros(self.n_states,self.n_states)
                 A_i[0,3] = ca.cos(self.p_phi[0,i])
@@ -460,9 +501,9 @@ class STM_DRCCLPVMPC:
                 A_i = ca.diag(ca.DM.ones(self.n_states)) + A_i*self.dt
                 B_i = B_i * self.dt
 
-            A_ls.append(A_i) # A0, A1, ...
-            B_ls.append(B_i) # B0, B1, ...
-            C_ls.append(C_k)
+                A_ls.append(A_i) # A0, A1, ...
+                B_ls.append(B_i) # B0, B1, ...
+                C_ls.append(C_k)
 
         E_ls = []
         for i in range(self.horizon): # this for the steps
@@ -497,13 +538,17 @@ class STM_DRCCLPVMPC:
             Hn[i*self.n_states:(i+1)*self.n_states,i*self.n_states:(i+1)*self.n_states] = np.eye(self.n_states)
 
         # print("Hn ls :",Hn_ls)
-        C_N = ca.DM.zeros(self.n_states*self.horizon,1)
-        for i in range(self.horizon):
-            C_N[i*self.n_states:(i+1)*self.n_states,0] = C_ls[i]
+        if not self.approx:
+            C_N = ca.DM.zeros(self.n_states*self.horizon,1)
+            for i in range(self.horizon):
+                C_N[i*self.n_states:(i+1)*self.n_states,0] = C_ls[i]
         ############################ update objective function ############################
-
-        ref_state = np.array(ca.vertcat(self.reference_x,self.reference_y,self.reference_phi,
-                    self.reference_vx,self.reference_vy,self.reference_omega))
+        if self.approx:
+            ref_state = np.array(ca.vertcat(self.reference_x,self.reference_y,self.reference_phi,
+                    self.reference_vy,self.reference_omega))
+        else:
+            ref_state = np.array(ca.vertcat(self.reference_x,self.reference_y,self.reference_phi,
+                        self.reference_vx,self.reference_vy,self.reference_omega))
         
         self.ref_xy = ca.DM(ref_state[:3,:])
 
@@ -604,225 +649,93 @@ class STM_DRCCLPVMPC:
         #     opti.subject_to(opti.bounded(self.min_vx,DLnZn,self.max_vx))
 
         # ##################################### corridor constraints functions a11, b11, c11 ####################################
-        if use_chance_box:
-            Dn = ca.DM.zeros(self.horizon,self.n_states*self.horizon)
-            for i in range(self.horizon):
-                Dn[i,i*self.n_states] = a11[i+1,0]
-                Dn[i,i*self.n_states+1] = b11[i+1,0]
+        
+        Dn = ca.DM.zeros(self.horizon,self.n_states*self.horizon)
+        for i in range(self.horizon):
+            Dn[i,i*self.n_states] = a11[i+1,0]
+            Dn[i,i*self.n_states+1] = b11[i+1,0]
 
-            for i in range(self.horizon):
-                dn = ca.DM.zeros(1,self.horizon)
+        # print("c3 :",c3)
 
-                dn[0,i] = 1
+        for i in range(self.horizon):
+            dn = ca.DM.zeros(1,self.horizon)
 
-                q = opti.variable(1,1)
+            dn[0,i] = 1
 
-                dDLnZn = dn@Dn@Ln@z
-                if not self.approx:
-                    dDLnZn += dn@Dn@Hn@C_N
-                dDHn = dn@Dn@Hn
+            # q = opti.variable(1,1)
 
-                casj_samples = ca.DM.zeros(self.n_states*self.horizon,self.noise_arr.shape[0])
-                for j in range(self.noise_arr.shape[0]):
-                    casj = ca.DM(self.noise_arr[j])
-                    casj_samples[:,j] = casj
-                dDHn_casj = dDHn@casj_samples
+            dDLnZn = dn@Dn@Ln@z
+            if not self.approx:
+                dDLnZn += dn@Dn@Hn@C_N
+            # dDHn = dn@Dn@Hn
 
-                for j in range(self.noise_arr.shape[0]):
-                    opti.subject_to(q >= dDLnZn + dDHn_casj[0,j] - c11[i+1])
-
-                
-                opti.subject_to(q >= 0)
-
-                cvar_cost += q / (1 - self.epsilon)
-        else:
-            Dn = ca.DM.zeros(self.horizon,self.n_states*self.horizon)
-            for i in range(self.horizon):
-                Dn[i,i*self.n_states] = a11[i+1,0]
-                Dn[i,i*self.n_states+1] = b11[i+1,0]
-
-            # print("c3 :",c3)
-
-            for i in range(self.horizon):
-                dn = ca.DM.zeros(1,self.horizon)
-
-                dn[0,i] = 1
-
-                # q = opti.variable(1,1)
-
-                dDLnZn = dn@Dn@Ln@z
-                if not self.approx:
-                    dDLnZn += dn@Dn@Hn@C_N
-                # dDHn = dn@Dn@Hn
-
-                opti.subject_to(dDLnZn - c11[i+1] <= 0)
+            opti.subject_to(dDLnZn - c11[i+1] <= 0)
 
         # ##################################### corridor constraints functions a12, b12, c12 ####################################
-        if use_chance_box:
+        Dn = ca.DM.zeros(self.horizon,self.n_states*self.horizon)
+        for i in range(self.horizon):
+            Dn[i,i*self.n_states] = a12[i+1,0]
+            Dn[i,i*self.n_states+1] = b12[i+1,0]
 
-            Dn = ca.DM.zeros(self.horizon,self.n_states*self.horizon)
-            for i in range(self.horizon):
-                Dn[i,i*self.n_states] = a12[i+1,0]
-                Dn[i,i*self.n_states+1] = b12[i+1,0]
+        # print("c3 :",c3)
 
-            for i in range(self.horizon):
-                dn = ca.DM.zeros(1,self.horizon)
+        for i in range(self.horizon):
+            dn = ca.DM.zeros(1,self.horizon)
 
-                dn[0,i] = 1
+            dn[0,i] = 1
 
-                q = opti.variable(1,1)
+            # q = opti.variable(1,1)
 
-                dDLnZn = dn@Dn@Ln@z
-                if not self.approx:
-                    dDLnZn += dn@Dn@Hn@C_N
-                dDHn = dn@Dn@Hn
+            dDLnZn = dn@Dn@Ln@z
+            if not self.approx:
+                dDLnZn += dn@Dn@Hn@C_N
+            # dDHn = dn@Dn@Hn
 
-                casj_samples = ca.DM.zeros(self.n_states*self.horizon,self.noise_arr.shape[0])
-                for j in range(self.noise_arr.shape[0]):
-                    casj = ca.DM(self.noise_arr[j])
-                    casj_samples[:,j] = casj
-                dDHn_casj = dDHn@casj_samples
-
-                for j in range(self.noise_arr.shape[0]):
-                    opti.subject_to(q >= dDLnZn + dDHn_casj[0,j] - c12[i+1])
-
-                
-                opti.subject_to(q >= 0)
-
-                cvar_cost += q / (1 - self.epsilon)
-        else:
-            Dn = ca.DM.zeros(self.horizon,self.n_states*self.horizon)
-            for i in range(self.horizon):
-                Dn[i,i*self.n_states] = a12[i+1,0]
-                Dn[i,i*self.n_states+1] = b12[i+1,0]
-
-            # print("c3 :",c3)
-
-            for i in range(self.horizon):
-                dn = ca.DM.zeros(1,self.horizon)
-
-                dn[0,i] = 1
-
-                # q = opti.variable(1,1)
-
-                dDLnZn = dn@Dn@Ln@z
-                if not self.approx:
-                    dDLnZn += dn@Dn@Hn@C_N
-                # dDHn = dn@Dn@Hn
-
-                opti.subject_to(dDLnZn - c12[i+1] <= 0)
-
+            opti.subject_to(dDLnZn - c12[i+1] <= 0)
 
         # ##################################### corridor constraints functions a13, b13, c13 ####################################
+        Dn = ca.DM.zeros(self.horizon,self.n_states*self.horizon)
+        for i in range(self.horizon):
+            Dn[i,i*self.n_states] = a13[i+1,0]
+            Dn[i,i*self.n_states+1] = b13[i+1,0]
 
-        if use_chance_box:
+        # print("c3 :",c3)
 
-            Dn = ca.DM.zeros(self.horizon,self.n_states*self.horizon)
-            for i in range(self.horizon):
-                Dn[i,i*self.n_states] = a13[i+1,0]
-                Dn[i,i*self.n_states+1] = b13[i+1,0]
+        for i in range(self.horizon):
+            dn = ca.DM.zeros(1,self.horizon)
 
-            for i in range(self.horizon):
-                dn = ca.DM.zeros(1,self.horizon)
+            dn[0,i] = 1
 
-                dn[0,i] = 1
+            # q = opti.variable(1,1)
 
-                q = opti.variable(1,1)
+            dDLnZn = dn@Dn@Ln@z
+            if not self.approx:
+                dDLnZn += dn@Dn@Hn@C_N
+            # dDHn = dn@Dn@Hn
 
-                dDLnZn = dn@Dn@Ln@z
-                if not self.approx:
-                    dDLnZn += dn@Dn@Hn@C_N
-                dDHn = dn@Dn@Hn
-
-                casj_samples = ca.DM.zeros(self.n_states*self.horizon,self.noise_arr.shape[0])
-                for j in range(self.noise_arr.shape[0]):
-                    casj = ca.DM(self.noise_arr[j])
-                    casj_samples[:,j] = casj
-                dDHn_casj = dDHn@casj_samples
-
-                for j in range(self.noise_arr.shape[0]):
-                    opti.subject_to(q >= dDLnZn + dDHn_casj[0,j] - c13[i+1])
-
-                
-                opti.subject_to(q >= 0)
-
-                cvar_cost += q / (1 - self.epsilon)
-        else:
-            Dn = ca.DM.zeros(self.horizon,self.n_states*self.horizon)
-            for i in range(self.horizon):
-                Dn[i,i*self.n_states] = a13[i+1,0]
-                Dn[i,i*self.n_states+1] = b13[i+1,0]
-
-            # print("c3 :",c3)
-
-            for i in range(self.horizon):
-                dn = ca.DM.zeros(1,self.horizon)
-
-                dn[0,i] = 1
-
-                # q = opti.variable(1,1)
-
-                dDLnZn = dn@Dn@Ln@z
-                if not self.approx:
-                    dDLnZn += dn@Dn@Hn@C_N
-                # dDHn = dn@Dn@Hn
-
-                opti.subject_to(dDLnZn - c13[i+1] <= 0)
+            opti.subject_to(dDLnZn - c13[i+1] <= 0)
 
         # ##################################### corridor constraints functions a14, b14, c14 ####################################
-        if use_chance_box:
+        Dn = ca.DM.zeros(self.horizon,self.n_states*self.horizon)
+        for i in range(self.horizon):
+            Dn[i,i*self.n_states] = a14[i+1,0]
+            Dn[i,i*self.n_states+1] = b14[i+1,0]
 
-            Dn = ca.DM.zeros(self.horizon,self.n_states*self.horizon)
-            for i in range(self.horizon):
-                Dn[i,i*self.n_states] = a14[i+1,0]
-                Dn[i,i*self.n_states+1] = b14[i+1,0]
+        # print("c3 :",c3)
 
-            for i in range(self.horizon):
-                dn = ca.DM.zeros(1,self.horizon)
+        for i in range(self.horizon):
+            dn = ca.DM.zeros(1,self.horizon)
 
-                dn[0,i] = 1
+            dn[0,i] = 1
 
-                q = opti.variable(1,1)
+            # q = opti.variable(1,1)
 
-                dDLnZn = dn@Dn@Ln@z
-                if not self.approx:
-                    dDLnZn += dn@Dn@Hn@C_N
-                dDHn = dn@Dn@Hn
+            dDLnZn = dn@Dn@Ln@z
+            if not self.approx:
+                dDLnZn += dn@Dn@Hn@C_N
+            # dDHn = dn@Dn@Hn
 
-                casj_samples = ca.DM.zeros(self.n_states*self.horizon,self.noise_arr.shape[0])
-                for j in range(self.noise_arr.shape[0]):
-                    casj = ca.DM(self.noise_arr[j])
-                    casj_samples[:,j] = casj
-                dDHn_casj = dDHn@casj_samples
-
-                for j in range(self.noise_arr.shape[0]):
-                    opti.subject_to(q >= dDLnZn + dDHn_casj[0,j] - c14[i+1])
-
-                
-                opti.subject_to(q >= 0)
-
-                cvar_cost += q / (1 - self.epsilon)
-        else:
-            Dn = ca.DM.zeros(self.horizon,self.n_states*self.horizon)
-            for i in range(self.horizon):
-                Dn[i,i*self.n_states] = a14[i+1,0]
-                Dn[i,i*self.n_states+1] = b14[i+1,0]
-
-            # print("c3 :",c3)
-
-            for i in range(self.horizon):
-                dn = ca.DM.zeros(1,self.horizon)
-
-                dn[0,i] = 1
-
-                # q = opti.variable(1,1)
-
-                dDLnZn = dn@Dn@Ln@z
-                if not self.approx:
-                    dDLnZn += dn@Dn@Hn@C_N
-                # dDHn = dn@Dn@Hn
-
-                opti.subject_to(dDLnZn - c14[i+1] <= 0)
+            opti.subject_to(dDLnZn - c14[i+1] <= 0)
 
         # ##################################### obstacles constraints functions a3, b3, c3 ####################################
         if CvaR_corrid:
@@ -924,9 +837,9 @@ class STM_DRCCLPVMPC:
         # Adu = Adu.sparsity()
         # Aau = Aau.sparsity()
         if self.approx:
-            opti.subject_to(opti.bounded(self.min_acc, Aau@z, self.max_acc))
+            opti.subject_to(opti.bounded(self.min_vx, Aau@z, self.max_vx))
         else:
-            opti.subject_to(opti.bounded(0.4, Aau@z, 1.0))
+            opti.subject_to(opti.bounded(0.38, Aau@z, 1.0))
         opti.subject_to(opti.bounded(self.min_steer, Adu@z , self.max_steer))
 
         ###################################### minimize the objective function ##########################################
@@ -1060,10 +973,13 @@ class STM_DRCCLPVMPC:
         """
         s0 = 0.0
         st = 0.0
-
-        x0 = ca.DM([current_state[0],current_state[1],
-                    current_state[2],current_state[3],
-                    current_state[4],current_state[5]]) 
+        if self.approx:
+            x0 = ca.DM([current_state[0],current_state[1],
+            current_state[2],current_state[3], current_state[4]]) 
+        else:
+            x0 = ca.DM([current_state[0],current_state[1],
+                        current_state[2],current_state[3],
+                        current_state[4],current_state[5]]) 
         # x, y, phi, vx, vy, omega
         tau0 = self.path_ptr_.xy_to_tau(x0[:2])
         # print("tau 0 :",tau0)
@@ -1074,39 +990,31 @@ class STM_DRCCLPVMPC:
         
         st = s0 + self.max_vx*self.dt*self.horizon
         
-        self.s_arr = ca.linspace(s0,st,self.horizon+1).T
-        
         if st>=self.s_max:
-
+            st = self.s_max - 0.1
+            
+        if st - s0 < 0.5:
             return False
-
-        self.tau_arr = self.path_ptr_.s_to_tau_lookup(self.s_arr)
-
-        self.ref_pre_phi = self.path_ptr_.f_phi(self.tau_arr)
         
+        self.s_arr = ca.linspace(s0,st,self.horizon+1).T
 
-        # n_arr = ca.DM.zeros(1,self.horizon+1)
-        
-        # x0_n = self.path_ptr_.f_xy_to_taun(x0[:2],tau0)
-        
-        # n_arr = ca.linspace(x0_n, 0, self.horizon+1).T
+        self.tau_arr = self.path_ptr_.s_to_tau_lookup(self.s_arr)        
+
         n0 = self.path_ptr_.f_xy_to_taun(x0[:2],tau0)
 
         self.n_arr = ca.linspace(n0,0,self.horizon+1).T
-        # print("n arr:",self.n_arr)
         
         phi_fre = ca.atan2(n0,st-s0)
 
         self.ref_xy = self.path_ptr_.f_taun_to_xy(self.tau_arr,self.n_arr)
-        # print("ref xy:",self.ref_xy)
-        # phi_free = ca.atan(x0_n,st-s0)
+
         track_phi = self.path_ptr_.f_phi(self.tau_arr)
         track_phi[0,0] = x0[2]
         for i in range(1,self.horizon+1):
             delta = ca.arctan2(ca.sin(track_phi[0,i]-track_phi[0,i-1]),ca.cos(track_phi[0,i]-track_phi[0,i-1]))
             track_phi[0,i] = track_phi[0,i-1] + delta
+        self.ref_pre_phi = track_phi
         self.reference_phi = track_phi + phi_fre
-        # print("ref phi:",self.reference_phi)
         self.reference_x = self.ref_xy[0,:]
         self.reference_y = self.ref_xy[1,:]
 
@@ -1171,21 +1079,32 @@ class STM_DRCCLPVMPC:
         return self.lr*self.Car/self.Iz
     
     def A33(self):
-        return -self.Cd*self.p_vx/self.mass
+        betaf = self.betaf()
+        betar = self.betar()
+        return -self.Cd*self.p_vx/self.mass if not self.approx else -(betaf+betar)/self.p_vx
     
     def A34(self):
         betaf = self.betaf()
-        return betaf*ca.sin(self.p_delta)/self.p_vx
+        betar = self.betar()
+        return betaf*ca.sin(self.p_delta)/self.p_vx if not self.approx else (betar*self.lr-betaf*self.lf)/self.p_vx
     
     def A35(self):
         betaf = self.betaf()
         return (betaf*ca.sin(self.p_delta)*self.lf/self.p_vx) + self.p_vy
     
+    def A43(self):
+        gammaf = self.gammaf()
+        gammar = self.gammar()
+        return (gammar-gammaf)/self.p_vx
+    
     def A44(self):
         betaf = self.betaf()
         betar = self.betar()
+        gammaf = self.gammaf()
+        gammar = self.gammar()
         # return -betaf * ca.cos(self.p_delta) * (1/self.p_vx) - betar * (1/self.p_vx)
-        return (-betar/self.p_vx) - (betaf*ca.cos(self.p_delta)/self.p_vx)
+        return ((-betar/self.p_vx) - (betaf*ca.cos(self.p_delta)/self.p_vx) if 
+                not self.approx else -(gammaf*self.lf+gammar*self.lr)/self.p_vx)
     
     def A45(self):
         betaf = self.betaf()
@@ -1206,14 +1125,15 @@ class STM_DRCCLPVMPC:
     
     def B30(self):
         betaf = self.betaf()
-        return -betaf * ca.sin(self.p_delta)
+        return -betaf * ca.sin(self.p_delta) if not self.approx else betaf
     
     def B31(self):
         return (self.Cm1-self.Cm2*self.p_vx)/self.mass
     
     def B40(self):
         betaf = self.betaf()
-        return betaf * ca.cos(self.p_delta)
+        gammaf = self.gammaf()
+        return betaf * ca.cos(self.p_delta) if not self.approx else gammaf
     
     def B50(self):
         gammaf = self.gammaf()
@@ -1329,6 +1249,9 @@ class STM_DRCCLPVMPC:
     def get_old_p_param(self):
         return self.past_pvx,self.past_pvy,self.past_pphi,self.past_pdelta
     
+    def get_old_p_paramVx(self):
+        return self.past_pvx,self.past_pphi
+    
     def update_model_noise(self,noise):
         self.noise_arr = self.model_noise.update_noise_matrix(noise)
 
@@ -1339,6 +1262,9 @@ class STM_DRCCLPVMPC:
         # self.p_delta = ca.DM(new_pdelta).T
 
         # print(self.p_vx,self.p_vy,self.p_phi,self.p_delta)
+        
+    def update_new_p_paramVx(self, new_pphi):
+        self.p_phi = ca.DM(new_pphi).T
 
     def save_fixed_noise(self):
         self.model_noise.save_noise_arr()

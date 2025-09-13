@@ -7,7 +7,7 @@ def generate_launch_description():
     cfg_file = os.path.join(home, 'ros2_ws/src/drcclpvmpc_ros2/config/lincoln_planner.yaml')
 
     # Optional: point to an RViz config if you have one
-    rviz_cfg = os.path.join(home, 'ros2_ws/src/drcclpvmpc_ros2/config/rviz/planner_view.rviz')
+    rviz_cfg = os.path.join(home, 'ros2_ws/src/drcclpvmpc_ros2/config/planner_view.rviz')
 
     return LaunchDescription([
         # Your planner node

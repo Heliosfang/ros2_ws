@@ -20,6 +20,7 @@ from drcclpvmpc_ros2.racecar_path.racecar_path import RacecarPath
 from drcclpvmpc_ros2.obstacles.obstacle_shape import Rectangle_obs
 from drcclpvmpc_ros2.mpc.drcclpvmpc_core import STM_DRCCLPVMPC
 from drcclpvmpc_ros2.dynamics.lpvdynamics import BicycleDynamics
+from drcclpvmpc_ros2.dynamics.lpvdynamics_vx import BicycleDynamicsVx
 from drcclpvmpc_ros2.racecar_path.utils import plot_path
 
 class DRCCLPVMPCRos2Main(Node):
@@ -32,18 +33,28 @@ class DRCCLPVMPCRos2Main(Node):
         self.wheel_base = all_params['wheel_base']
         self.horizon = all_params.get('horizon_', 6)
         self.track_width = all_params.get('track_width_', 4.0)
+        
         self.use_drcc = all_params.get('use_drcc', True)
         self.safe_multiplier = all_params.get('safe_multiplier', 2.0)
 
         self.carParams = carSpec(all_params)
-        self.model = BicycleDynamics(all_params)
+        
+        self.approx = self.carParams['approx'] # True for 'acc' or 'vx', False for 'pwm'
 
+        if self.approx:
+            self.model = BicycleDynamicsVx(all_params)
+        else:
+            self.model = BicycleDynamics(all_params)
+            
         # Service name and goal topic
         self.services_name = all_params.get('service_name', 'get_path_from_txt')
         self.goal_topic    = all_params.get('goal_topic', '/move_base_simple/goal')
 
         # State
-        self.current_state = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        if self.approx:
+            self.current_state = [0.0, 0.0, 0.0, 0.0, 0.0] # [x, y, phi, vy, omega]
+        else:
+            self.current_state = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0] # [x, y, phi, vx, vy, omega]
         self.track_ptr = None
         self.lock = threading.Lock()
         self.initialized = False
@@ -78,8 +89,11 @@ class DRCCLPVMPCRos2Main(Node):
         self.goal_sub = self.create_subscription(PoseStamped, self.goal_topic, self.goal_callback, 10)
         self.obs_sub  = self.create_subscription(Float32MultiArray, "/obs_box", self.obs_callback, 10)
 
-        # Publisher (combined [steering, throttle])
+        # Publisher (combined [steering, throttle, brake])
         self.cmd_pub = self.create_publisher(Float32MultiArray, "/control_cmd", 10)
+        
+        # Publisher (combined [steering, vx, brake])
+        self.vel_cmd_pub = self.create_publisher(Float32MultiArray, "/velocity_cmd", 10)
 
         # Service client
         self.plan_client = self.create_client(GetPlan, self.services_name)
@@ -105,13 +119,16 @@ class DRCCLPVMPCRos2Main(Node):
         self.prev_odom_phi = phi
         # print("odom phi:", phi)
         vx = msg.twist.twist.linear.x
-        print("vx:", vx)
+        # print("vx:", vx)
         vy = msg.twist.twist.linear.y
-        print("vy:", vy)
+        # print("vy:", vy)
         omega = msg.twist.twist.angular.z
-        print("omega:", omega)
+        # print("omega:", omega)
         with self.lock:
-            self.current_state = [x, y, phi, vx, vy, omega]
+            if self.approx:
+                self.current_state = [x, y, phi, vy, omega]
+            else:
+                self.current_state = [x, y, phi, vx, vy, omega]
 
     def goal_callback(self, goal: PoseStamped):
         if not self.plan_client.service_is_ready():
@@ -184,9 +201,9 @@ class DRCCLPVMPCRos2Main(Node):
             max_s_val = self.track_ptr.tau_to_s_lookup(max_tau_val)
             min_s_val = self.track_ptr.tau_to_s_lookup(min_tau_val)
             
-            s1 = max_s_val + self.carParams['max_vx'] * self.safe_multiplier
+            s1 = max_s_val + self.carParams['max_vx'] * self.safe_multiplier * self.horizon * self.dt
             s1 = min(s1, self.s_max)
-            s0 = min_s_val - self.carParams['max_vx'] * self.safe_multiplier
+            s0 = min_s_val - self.carParams['max_vx'] * self.safe_multiplier * self.horizon * self.dt
             s0 = max(s0, 0.1)
             
             max_tau_val = self.track_ptr.s_to_tau_lookup(s1)
@@ -252,12 +269,20 @@ class DRCCLPVMPCRos2Main(Node):
                 )
                 if self.drcc_success:
                     steer = float(self.drcc_control[0,self.control_step])
-                    throttle = float(self.drcc_control[1,self.control_step])
-                    brake = 0.0
-                    cmd_msg = Float32MultiArray()
-                    cmd_msg.data = [steer, throttle, brake]
-                    self.cmd_pub.publish(cmd_msg)
-                    self.get_logger().info(f"Publishing control: steer={steer:.3f}, throttle={throttle:.3f}")
+                    if self.approx:
+                        vx = float(self.drcc_control[1,self.control_step])
+                        brake = 0.0
+                        vel_msg = Float32MultiArray()
+                        vel_msg.data = [steer, vx, brake]
+                        self.vel_cmd_pub.publish(vel_msg)
+                        self.get_logger().info(f"Publishing control: steer={steer:.3f}, vx={vx:.3f}")
+                    else:
+                        throttle = float(self.drcc_control[1,self.control_step])
+                        brake = 0.0
+                        cmd_msg = Float32MultiArray()
+                        cmd_msg.data = [steer, throttle, brake]
+                        self.cmd_pub.publish(cmd_msg)
+                        self.get_logger().info(f"Publishing control: steer={steer:.3f}, throttle={throttle:.3f}")
                 self.test_bug = False
             else:
                 self.drcc_success, self.drcc_z0, self.drcc_control = self.controller.get_Updated_local_path(
@@ -282,25 +307,38 @@ class DRCCLPVMPCRos2Main(Node):
                             self.get_logger().warn("Fail to solve the optimization problem, use previous feasible solution")
                             current_control = Float32MultiArray()
                             current_control.data = [self.prev_control[0,self.control_step],self.prev_control[1,self.control_step],0.0]
-                            self.cmd_pub.publish(current_control)
+                            if self.approx:
+                                self.vel_cmd_pub.publish(current_control)
+                            else:
+                                self.cmd_pub.publish(current_control)
                         else:
                             self.get_logger().warn("Fail to solve the optimization problem and use feasible solution")
                             current_control = Float32MultiArray()
                             current_control.data = [0,0,1]
-                            self.cmd_pub.publish(current_control)
+                            if self.approx:
+                                self.vel_cmd_pub.publish(current_control)
+                            else:
+                                self.cmd_pub.publish(current_control)
                     else:
                         self.get_logger().info("Planner reached to the end")
                         # try to stop the car by giving a zero signal
                         current_control = Float32MultiArray()
                         current_control.data = [0,0,1]
-                        self.cmd_pub.publish(current_control)
+                        if self.approx:
+                            self.vel_cmd_pub.publish(current_control)
+                        else:
+                            self.cmd_pub.publish(current_control)
                 else:
                     self.control_step = 0
                     self.prev_control = self.drcc_control
                     drcc_z0 = np.array(self.drcc_z0).squeeze()
                     drcc_control = np.array(self.drcc_control)
-                    lpv_pvx, lpv_pvy, lpv_pphi, lpv_pdelta = self.controller.get_old_p_param()
-                    lpv_pred_x = self.model.LPV_states(drcc_z0,drcc_control,lpv_pvx,lpv_pvy,lpv_pphi,lpv_pdelta,self.dt)
+                    if self.approx:
+                        lpv_pvx, lpv_pphi = self.controller.get_old_p_paramVx()
+                        lpv_pred_x = self.model.LPV_states(drcc_z0,drcc_control,lpv_pvx,lpv_pphi,self.dt)
+                    else:
+                        lpv_pvx, lpv_pvy, lpv_pphi, lpv_pdelta = self.controller.get_old_p_param()
+                        lpv_pred_x = self.model.LPV_states(drcc_z0,drcc_control,lpv_pvx,lpv_pvy,lpv_pphi,lpv_pdelta,self.dt)
                     
                     ################ store the lpv predicted trajectory for plot ###########
                     lpv_x = lpv_pred_x[0,:]
@@ -309,15 +347,25 @@ class DRCCLPVMPCRos2Main(Node):
                     self.lpvx_queue.put(lpv_x)
                     self.lpvy_queue.put(lpv_y)
                     
-                    new_pvx = lpv_pred_x[3,1:]
-                    new_pvy = lpv_pred_x[4,1:]
-                    new_pphi = lpv_pred_x[2,1:]
-                    self.controller.update_new_p_param(new_pvx,new_pvy,new_pphi)
+                    if self.approx:
+                        new_pphi = lpv_pred_x[2,1:]
+                        self.controller.update_new_p_paramVx(new_pphi)
+                    else:
+                        new_pvx = lpv_pred_x[3,1:]
+                        new_pvy = lpv_pred_x[4,1:]
+                        new_pphi = lpv_pred_x[2,1:]
+                        self.controller.update_new_p_param(new_pvx,new_pvy,new_pphi)
                     
                     current_control = Float32MultiArray()
                     current_control.data = [drcc_control[0,self.control_step],drcc_control[1,self.control_step],0.0]
-                    print("steer:", drcc_control[0,self.control_step], "throttle:", drcc_control[1,self.control_step])
-                    self.cmd_pub.publish(current_control)
+                    if self.approx:
+                        print("steer:", drcc_control[0,self.control_step], "speed:", drcc_control[1,self.control_step])
+                    else:
+                        print("steer:", drcc_control[0,self.control_step], "throttle:", drcc_control[1,self.control_step])
+                    if self.approx:
+                        self.vel_cmd_pub.publish(current_control)
+                    else:
+                        self.cmd_pub.publish(current_control)
 
     # ------------------- Service response handler -------------------
     def _on_plan_response(self, future):
