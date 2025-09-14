@@ -3,13 +3,14 @@ import os, math, bisect
 import matplotlib.pyplot as plt
 
 # ====== CONFIG ======
-P1, P2, P3, P4 = (299.399994, 55.840000), (166.70510864257812, 55.840000), (154.17022705078125, 43.39997863769531), (154.17022705078125, 2.9970593452453613)
+# P1, P2, P3, P4 = (299.399994, 55.840000), (170.70510864257812, 55.840000), (156.5622705078125, 43.29997863769531), (154.17022705078125, 2.9970593452453613)
+P1, P2, P3, P4 = (-164.732162, -95.141876), (-231.7088012695312, -95.2505874633789), (-273.3805847167969, -50.73670959472656), (-273.3805847167969, 55.14298248291016)
 
 # Dense pre-sampling for smooth resampling
 LINE1_SAMPLES, CURVE_SAMPLES, LINE3_SAMPLES = 200, 600, 200
 
 # Tangent scaling at the curve ends; >1 gives more "convex" (bulge)
-BULGE_GAIN = 1.25   # try 1.0 .. 2.0
+BULGE_GAIN = 1.00   # try 1.0 .. 2.0
 
 # Even spacing: choose one of these (set the other to None)
 EVEN_STEP   = 0.50   # meters between points

@@ -4,7 +4,7 @@ drcclpvmpc_main:
     horizon_: 6
     track_width_: 4.0
     use_drcc: true
-    control_type: "pwm"  # 'pwm'|'vx'
+    control_type: "vx"  # 'pwm'|'vx'
     # Below are parameters for the specific vehicle model
     lf: 1.3
     lr: 1.6
@@ -33,22 +33,22 @@ drcclpvmpc_main:
     max_steer: 70  # [deg]
     min_steer: -70 # [deg]
 
-    max_vy: 10.0     # [m/s]
-    min_vy: -10.0    # [m/s]
+    max_vy: 20.0     # [m/s]
+    min_vy: -20.0    # [m/s]
 
-    max_vx: 10.0    # [m/s]
-    min_vx: 0.0     # [m/s]
+    max_vx: 30.0    # [m/s]
+    min_vx: 29.5     # [m/s]
 
     max_acc: 3.0     # [m/s^2]
     min_acc: -6.0    # [m/s^2]
 
-    max_omega: 50  # [rad/s]
-    min_omega: -50 # [rad/s]
+    max_omega: 100  # [rad/s]
+    min_omega: -100 # [rad/s]
 
     # Below are parameters for the global path service name
     service_name: "get_path_from_txt"
     goal_topic: "/goal_pose"
 
     # Below defines the safety distance to the obstacle: safe_multiplier * max_vx
-    safe_multiplier: 8.0
+    safe_multiplier: 4.0
 

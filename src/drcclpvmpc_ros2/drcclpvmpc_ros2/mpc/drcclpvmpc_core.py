@@ -225,7 +225,7 @@ class STM_DRCCLPVMPC:
 
         self.drcc_weight = ca.DM.zeros(1,self.horizon)
         # self.drcc_weight[0,:] = -0.01*ca.linspace(0,1,self.horizon).T
-        self.drcc_weight = -0.6*ca.DM.ones(1,self.horizon)
+        self.drcc_weight = -8.0*ca.DM.ones(1,self.horizon)
         
         self.P = ca.DM.zeros(self.n_states,self.horizon)
         ############## this used for drcc #################
@@ -236,16 +236,18 @@ class STM_DRCCLPVMPC:
                 self.P[0,:] = 4*ca.DM.ones(1,self.horizon).T # sepecify x
                 self.P[1,:] = 4*ca.DM.ones(1,self.horizon).T # sepecify y
             else:
+                self.P[0,-1] = 10 # sepecify x
+                self.P[1,-1] = 10 # sepecify y
                 # self.P[0,:] = 4*ca.DM.ones(1,self.horizon).T # sepecify x
                 # self.P[1,:] = 4*ca.DM.ones(1,self.horizon).T # sepecify y
-                self.P[0,:] = ca.linspace(5,6,self.horizon).T # sepecify x
-                self.P[1,:] = ca.linspace(5,6,self.horizon).T # sepecify y
+                # self.P[0,:] = ca.linspace(4,6,self.horizon).T # sepecify x
+                # self.P[1,:] = ca.linspace(4,6,self.horizon).T # sepecify y
                 # self.P[2,:] = 0.0*ca.linspace(0,1,self.horizon).T # sepecify phi
                 # self.P[3,:] = 0.0*ca.DM.ones(1,self.horizon).T # sepecify ddphi
                 # self.P[4,:] = 0*ca.DM.ones(1,self.horizon).T # sepecify ddelta
             
             self.Q = ca.DM.zeros(self.n_inputs,self.horizon)
-            self.Q[0,:] = 0.4*ca.DM.ones(1,self.horizon)
+            self.Q[0,:] = 1.0*ca.DM.ones(1,self.horizon)
         else:
             self.P[0,-1] = 20 # sepecify x
             self.P[0,-1] = 20 # sepecify y
@@ -845,7 +847,7 @@ class STM_DRCCLPVMPC:
         if self.approx:
             opti.subject_to(opti.bounded(self.min_vx, Aau@z, self.max_vx))
         else:
-            opti.subject_to(opti.bounded(0.38, Aau@z, 1.0))
+            opti.subject_to(opti.bounded(0.41, Aau@z, 1.0))
         opti.subject_to(opti.bounded(self.min_steer, Adu@z , self.max_steer))
 
         ###################################### minimize the objective function ##########################################
@@ -997,9 +999,9 @@ class STM_DRCCLPVMPC:
         st = s0 + self.max_vx*self.dt*self.horizon
         
         if st>=self.s_max:
-            st = self.s_max - 0.1
+            st = self.s_max - 5
             
-        if st - s0 < 0.5:
+        if st - s0 < 5.0:
             return False
         
         self.s_arr = ca.linspace(s0,st,self.horizon+1).T

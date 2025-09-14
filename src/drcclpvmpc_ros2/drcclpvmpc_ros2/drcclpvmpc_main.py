@@ -357,15 +357,15 @@ class DRCCLPVMPCRos2Main(Node):
                         self.controller.update_new_p_param(new_pvx,new_pvy,new_pphi)
                     
                     current_control = Float32MultiArray()
-                    if self.approx:
+                    if not self.approx:
                         current_control.data = [drcc_control[0,self.control_step],drcc_control[1,self.control_step],0.0]
                     else:
-                        current_control.data = [drcc_control[0,self.control_step],0.4,0.0]
+                        current_control.data = [drcc_control[0,self.control_step],0.42,0.0]
                     if self.approx:
                         print("steer:", drcc_control[0,self.control_step], "speed:", drcc_control[1,self.control_step])
                     else:
                         print("steer:", drcc_control[0,self.control_step], "throttle:", drcc_control[1,self.control_step])
-                    if self.approx:
+                    if not self.approx:
                         self.vel_cmd_pub.publish(current_control)
                     else:
                         self.cmd_pub.publish(current_control)
@@ -498,7 +498,7 @@ def main(args=None):
             LnS.set_ydata(Py_data)
             
             ########################## Draw safety region ##########################
-            if node.controller is not None:
+            if node.rec_obs is not None:
                 a_tau = node.controller.get_obs_atau()
                 a_n = node.controller.get_obs_an()
 

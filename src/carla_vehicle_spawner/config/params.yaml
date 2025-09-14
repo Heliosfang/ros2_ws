@@ -5,15 +5,15 @@ carla_vehicle_spawner:
     spectator_follow_lag_sec: 0.10       # increase for more trailing feel
     spectator_yaw_lookahead_sec: 0.15    # increase to look further into turns
 
-    carla_map: "Town01"
+    carla_map: "Town05"
     vehicle_blueprint: "vehicle.lincoln.mkz_2017"
 
     # fixed spawn (example: by index)
     spawn_mode: "index"     # "index" or "pose"
-    spawn_index: 4
+    spawn_index: 0
 
     # spectator in vehicle frame
-    spectator_offset_x: -6.0
+    spectator_offset_x: -10.0
     spectator_offset_z: 3.0
 
     # 2D LiDAR
