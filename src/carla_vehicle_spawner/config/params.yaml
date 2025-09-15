@@ -1,37 +1,101 @@
 carla_vehicle_spawner:
   ros__parameters:
-    spectator_smooth_tau_pos: 0.15
-    spectator_smooth_tau_yaw: 0.20
-    spectator_follow_lag_sec: 0.10       # increase for more trailing feel
-    spectator_yaw_lookahead_sec: 0.15    # increase to look further into turns
+    carla_host: "127.0.0.1"
+    carla_port: 2000
+    carla_timeout: 5.0
 
     carla_map: "Town05"
     vehicle_blueprint: "vehicle.lincoln.mkz_2017"
+    role_name: "ego"
+    enable_autopilot: false
 
-    # fixed spawn (example: by index)
-    spawn_mode: "index"     # "index" or "pose"
+    spawn_mode: "index"     # or "pose"
     spawn_index: 0
 
-    # spectator in vehicle frame
-    spectator_offset_x: -10.0
+    # If using spawn_mode == "pose"
+    spawn_x: 0.0
+    spawn_y: 0.0
+    spawn_z: 0.5
+    spawn_roll: 0.0
+    spawn_pitch: 0.0
+    spawn_yaw: 0.0
+
+    # Spectator chase-cam
+    spectator_offset_x: -10.0   # behind
+    spectator_offset_y: 0.0
     spectator_offset_z: 3.0
+    spectator_smooth_tau_pos: 0.15
+    spectator_smooth_tau_yaw: 0.20
+    spectator_follow_lag_sec: 0.10
+    spectator_yaw_lookahead_sec: 0.15
 
-    # 2D LiDAR
-    lidar_range: 30.0
-    lidar_upper_fov: 0.0
-    lidar_lower_fov: 0.0
-    lidar_points_per_second: 200000
-    lidar_rotation_frequency: 10.0
-    lidar_dropoff_general_rate: 0.0
-    lidar_dropoff_intensity_limit: 1.0
-    lidar_dropoff_zero_intensity: 0.0
+carla_lidar_attacher:
+  ros__parameters:
+    host: "127.0.0.1"
+    port: 2000
+    timeout: 5.0
 
-    # camera
-    enable_camera: true
-    camera_width: 800
-    camera_height: 600
-    camera_fov: 90.0
-    camera_sensor_tick: 0.0
+    # Pick your vehicle (matches your car spawner)
+    vehicle_actor_id: 0
+    vehicle_role_name: "ego"             # easiest if your car was spawned with role_name=ego
+    vehicle_blueprint: "vehicle.*"
+    vehicle_blueprint_index: 0
+
+    # LiDAR mount (relative to base_link)
+    lidar_frame_id: "lidar_link"
+    lidar_mount_x: 0.0
+    lidar_mount_y: 0.0
+    lidar_mount_z: 2.4
+    lidar_mount_roll: 0.0
+    lidar_mount_pitch: 0.0
+    lidar_mount_yaw: 0.0
+
+    # LiDAR sensor parameters
+    range: 200.0
+    channels: 64
+    upper_fov: 10.0
+    lower_fov: -30.0
+    points_per_second: 1200000
+    rotation_frequency: 50.0
+    noise_stddev: 0.0
+    dropoff_general_rate: 0.0
+    dropoff_intensity_limit: 1.0
+    dropoff_zero_intensity: 0.0
+    atmosphere_attenuation_rate: 0.004
+    sensor_tick: 0.0
+
+carla_camera_attacher:
+  ros__parameters:
+    host: "127.0.0.1"
+    port: 2000
+    timeout: 5.0
+
+    # Vehicle selection (match your spawner)
+    vehicle_actor_id: 0
+    vehicle_role_name: "ego"
+    vehicle_blueprint: "vehicle.*"
+    vehicle_blueprint_index: 0
+
+    # Camera mount
+    camera_frame_id: "camera_link"
+    mount_x: 1.5
+    mount_y: 0.0
+    mount_z: 2.0
+    mount_roll: 0.0
+    mount_pitch: 0.0
+    mount_yaw: 0.0
+
+    # Sensor params
+    image_width: 1280
+    image_height: 720
+    fov: 90.0
+    sensor_tick: 0.0
+    ros_image_encoding: "bgr8"     # or "bgra8"
+
+    # CameraInfo
+    publish_camera_info: true
+    camera_info_frame_id: "camera_link"
+    camera_info_topic: "carla/camera_info"
 
 carla_odom_publisher:
   ros__parameters:

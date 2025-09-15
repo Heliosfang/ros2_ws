@@ -18,6 +18,8 @@ setup(
 
         # ✅ Install config files
         (os.path.join('share', package_name, 'config'), glob('config/*.yaml')),
+        (os.path.join('share', package_name, 'config'), glob('config/*.rviz')),
+        
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -28,7 +30,9 @@ setup(
     tests_require=['pytest'],
     entry_points={
     'console_scripts': [
-        'spawn_and_publish = carla_vehicle_spawner.spawn_and_publish:main',
+        'carla_camera_attacher = carla_vehicle_spawner.carla_camera_attacher:main',
+        'lidar_sensor = carla_vehicle_spawner.lidar_sensor:main',
+        'car_and_spectator = carla_vehicle_spawner.car_and_spectator:main',
         'odom_publisher = carla_vehicle_spawner.odom_publisher:main',
         'vehicle_controller = carla_vehicle_spawner.vehicle_controller:main',
         'vehicle_controller_keyboard = carla_vehicle_spawner.vehicle_controller_keyboard:main',

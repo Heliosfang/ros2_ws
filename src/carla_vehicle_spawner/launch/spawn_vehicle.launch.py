@@ -11,14 +11,19 @@ def generate_launch_description():
     vehicle_spawner_package = get_package_share_directory('carla_vehicle_spawner')
     cfg = os.path.join(vehicle_spawner_package, 'config', 'params.yaml')
     path_server_package = get_package_share_directory('path_publisher')
+    rviz_cfg = os.path.join(vehicle_spawner_package, 'config', 'planner_view.rviz')
+    
     return LaunchDescription([
-        Node(package='carla_vehicle_spawner', executable='spawn_and_publish',
+        Node(package='carla_vehicle_spawner', executable='car_and_spectator',
              name='carla_vehicle_spawner', output='screen', parameters=[cfg]),
         Node(package='carla_vehicle_spawner', executable='odom_publisher',
              name='carla_odom_publisher', output='screen', parameters=[cfg]),
         Node(package='carla_vehicle_spawner', executable='vehicle_controller',
              name='carla_vehicle_controller', output='screen', parameters=[cfg]),
-        
+        Node(package='carla_vehicle_spawner', executable='lidar_sensor',
+             name='carla_lidar_attacher', output='screen', parameters=[cfg]),
+        Node(package='carla_vehicle_spawner', executable='carla_camera_attacher',
+             name='carla_camera_attacher', output='screen', parameters=[cfg]),
         IncludeLaunchDescription(
                PythonLaunchDescriptionSource(
                     os.path.join(spawn_obstacle_package, 'launch', 'spawn_and_publish.launch.py')
@@ -26,4 +31,33 @@ def generate_launch_description():
           ),
         Node(package='path_publisher', executable='path_server',
              name='path_server', output='screen'),
+        
+        # Publish a static transform: map -> odom (identity)
+     #    If you prefer map->base_link, change the last two frame names accordingly.
+     #    Node(
+     #        package="tf2_ros",
+     #        executable="static_transform_publisher",
+     #        name="map_to_odom",
+     #        arguments=["0", "0", "0", "0", "0", "0", "map", "base_link"],
+     #        output="screen",
+     #    ),
+        
+        # If you prefer map->base_link, change the last two frame names accordingly.
+     #    Node(
+     #        package="tf2_ros",
+     #        executable="static_transform_publisher",
+     #        name="map_to_odom",
+     #        arguments=["0", "0", "2.4", "0", "0", "0", "base_link", "lidar_link"],
+     #        output="screen",
+     #    ),
+        
+        # RViz2 (loads a config if it exists; otherwise RViz starts with defaults)
+        Node(
+            package="rviz2",
+            executable="rviz2",
+            name="rviz2",
+            # If you don't have an RViz config yet, you can remove the '-d' and path.
+            arguments=["-d", rviz_cfg],
+            output="screen",
+        ),
     ])
