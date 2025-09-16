@@ -6,21 +6,14 @@ obstacle_spawner:
     publish_rate_hz: 10.0
     vehicles:
       car1:
-        blueprint: "vehicle.nissan.patrol"
-        x: 26.63530158996582
-        y: 141.5
+        blueprint: "vehicle.audi.tt"
+        x: -211.7088012695312
+        y: -95.2505874633789
         z: 0.1
-        yaw: 0.0
+        yaw: 180.0
       car2:
-        blueprint: "vehicle.sprinter.mercedes"
-        x: 109.19975280761719
-        y: 51.77189254760742
+        blueprint: "vehicle.audi.tt"
+        x: -273.014831542969
+        y: -20.430727005004883
         z: 0.1
-        yaw: -90.0
-
-      car3:
-        blueprint: "vehicle.sprinter.mercedes"
-        x: 39.86615753173828
-        y: -68.25939178466797
-        z: 0.1
-        yaw: 180
+        yaw: 90.0

@@ -233,10 +233,8 @@ class STM_DRCCLPVMPC:
             # self.P[0,-1] = 20 # sepecify x
             # self.P[0,-1] = 20 # sepecify y
             if self.approx:
-                self.P[0,:] = 40*ca.DM.ones(1,self.horizon).T # sepecify x
-                self.P[1,:] = 40*ca.DM.ones(1,self.horizon).T # sepecify y
-                # self.P[0,-1] = 100 # sepecify x
-                # self.P[1,-1] = 100 # sepecify y
+                self.P[0,:] = 4*ca.DM.ones(1,self.horizon).T # sepecify x
+                self.P[1,:] = 4*ca.DM.ones(1,self.horizon).T # sepecify y
             else:
                 self.P[0,-1] = 10 # sepecify x
                 self.P[1,-1] = 10 # sepecify y
@@ -849,7 +847,7 @@ class STM_DRCCLPVMPC:
         if self.approx:
             opti.subject_to(opti.bounded(self.min_vx, Aau@z, self.max_vx))
         else:
-            opti.subject_to(opti.bounded(0.30, Aau@z, 1.0))
+            opti.subject_to(opti.bounded(0.41, Aau@z, 1.0))
         opti.subject_to(opti.bounded(self.min_steer, Adu@z , self.max_steer))
 
         ###################################### minimize the objective function ##########################################
@@ -997,16 +995,13 @@ class STM_DRCCLPVMPC:
             tau0 = 0.1
 
         s0 = self.path_ptr_.tau_to_s_lookup(tau0)
-        # print("s0 :",s0)
-        # print("smax :",self.s_max)
         
         st = s0 + self.max_vx*self.dt*self.horizon
         
         if st>=self.s_max:
             st = self.s_max - 5
             
-        if self.s_max - st < 5.0:
-            # print("st:",st)
+        if st - s0 < 5.0:
             return False
         
         self.s_arr = ca.linspace(s0,st,self.horizon+1).T
@@ -1030,7 +1025,6 @@ class STM_DRCCLPVMPC:
         self.reference_phi = track_phi + phi_fre
         self.reference_x = self.ref_xy[0,:]
         self.reference_y = self.ref_xy[1,:]
-        print("ref phi:",self.reference_phi)
 
         return True
 

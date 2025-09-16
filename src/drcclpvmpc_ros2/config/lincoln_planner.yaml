@@ -30,14 +30,14 @@ drcclpvmpc_main:
     Cd: 19.64
 
     # Below are parameters for the control limits
-    max_steer: 40  # [deg]
-    min_steer: -40 # [deg]
+    max_steer: 70  # [deg]
+    min_steer: -70 # [deg]
 
     max_vy: 20.0     # [m/s]
     min_vy: -20.0    # [m/s]
 
-    max_vx: 100.0    # [m/s]
-    min_vx: 39.5     # [m/s]
+    max_vx: 30.0    # [m/s]
+    min_vx: 29.5     # [m/s]
 
     max_acc: 3.0     # [m/s^2]
     min_acc: -6.0    # [m/s^2]
@@ -50,5 +50,5 @@ drcclpvmpc_main:
     goal_topic: "/goal_pose"
 
     # Below defines the safety distance to the obstacle: safe_multiplier * max_vx
-    safe_multiplier: 9.0
+    safe_multiplier: 4.0
 
