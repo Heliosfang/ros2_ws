@@ -360,7 +360,7 @@ class DRCCLPVMPCRos2Main(Node):
                     if not self.approx:
                         current_control.data = [drcc_control[0,self.control_step],drcc_control[1,self.control_step],0.0]
                     else:
-                        current_control.data = [drcc_control[0,self.control_step],0.42,0.0]
+                        current_control.data = [drcc_control[0,self.control_step],0.30,0.0]
                     if self.approx:
                         print("steer:", drcc_control[0,self.control_step], "speed:", drcc_control[1,self.control_step])
                     else:

@@ -32,25 +32,6 @@ def generate_launch_description():
         Node(package='path_publisher', executable='path_server',
              name='path_server', output='screen'),
         
-        # Publish a static transform: map -> odom (identity)
-     #    If you prefer map->base_link, change the last two frame names accordingly.
-     #    Node(
-     #        package="tf2_ros",
-     #        executable="static_transform_publisher",
-     #        name="map_to_odom",
-     #        arguments=["0", "0", "0", "0", "0", "0", "map", "base_link"],
-     #        output="screen",
-     #    ),
-        
-        # If you prefer map->base_link, change the last two frame names accordingly.
-     #    Node(
-     #        package="tf2_ros",
-     #        executable="static_transform_publisher",
-     #        name="map_to_odom",
-     #        arguments=["0", "0", "2.4", "0", "0", "0", "base_link", "lidar_link"],
-     #        output="screen",
-     #    ),
-        
         # RViz2 (loads a config if it exists; otherwise RViz starts with defaults)
         Node(
             package="rviz2",

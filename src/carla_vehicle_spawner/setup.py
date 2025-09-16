@@ -19,6 +19,7 @@ setup(
         # ✅ Install config files
         (os.path.join('share', package_name, 'config'), glob('config/*.yaml')),
         (os.path.join('share', package_name, 'config'), glob('config/*.rviz')),
+        ('share/' + package_name + '/config', ['config/planner_view.rviz']),  # optional
         
     ],
     install_requires=['setuptools'],

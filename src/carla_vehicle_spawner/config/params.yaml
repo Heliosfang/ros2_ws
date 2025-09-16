@@ -4,13 +4,13 @@ carla_vehicle_spawner:
     carla_port: 2000
     carla_timeout: 5.0
 
-    carla_map: "Town05"
-    vehicle_blueprint: "vehicle.lincoln.mkz_2017"
+    carla_map: "Town10HD_Opt"
+    vehicle_blueprint: "vehicle.lincoln.mkz"
     role_name: "ego"
     enable_autopilot: false
 
     spawn_mode: "index"     # or "pose"
-    spawn_index: 0
+    spawn_index: 6 # 4,6
 
     # If using spawn_mode == "pose"
     spawn_x: 0.0
@@ -106,7 +106,7 @@ carla_odom_publisher:
     # selection precedence: actor_id > role_name > blueprint
     vehicle_actor_id: 0
     vehicle_role_name: "ego"                 # set to "ego" if you tag the vehicle
-    vehicle_blueprint: "vehicle.lincoln.mkz_2017"
+    vehicle_blueprint: "vehicle.lincoln.mkz"
     vehicle_blueprint_index: 0
 
 carla_vehicle_controller:
