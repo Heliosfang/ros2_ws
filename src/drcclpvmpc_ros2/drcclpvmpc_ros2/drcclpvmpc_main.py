@@ -23,6 +23,9 @@ from drcclpvmpc_ros2.dynamics.lpvdynamics import BicycleDynamics
 from drcclpvmpc_ros2.dynamics.lpvdynamics_vx import BicycleDynamicsVx
 from drcclpvmpc_ros2.racecar_path.utils import plot_path
 
+import open3d as o3d
+import os
+
 class DRCCLPVMPCRos2Main(Node):
     def __init__(self):
         super().__init__("drcclpvmpc_main", automatically_declare_parameters_from_overrides=True)
@@ -69,6 +72,9 @@ class DRCCLPVMPCRos2Main(Node):
         self.reach_end = False
         self.prev_control = None
         
+        ################ load pcd environment map ###############
+        self.env_map = all_params.get('environment_map', 'Town05')
+        
         ################ Ensure continuous phi ##################
         self.prev_odom_phi = None
         self.prev_rec_phi = None
@@ -81,6 +87,13 @@ class DRCCLPVMPCRos2Main(Node):
         self.refx_queue = queue.Queue()
         self.refy_queue = queue.Queue()
         self.P_queue = queue.Queue()
+        
+        self.atau_queue = queue.Queue()
+        self.btau_queue = queue.Queue()
+        self.an_queue = queue.Queue()
+        self.bn_queue = queue.Queue()
+        self.tau0_queue = queue.Queue()
+        self.tau1_queue = queue.Queue()
         
         ###################################################################################
         ###################################################################################
@@ -170,6 +183,7 @@ class DRCCLPVMPCRos2Main(Node):
             current_state = self.current_state
             self.P_queue.put(current_state[0:3])
         current_tau = self.track_ptr.xy_to_tau(current_state[:2])
+        current_s = float(self.track_ptr.tau_to_s_lookup(current_tau))
         # current_n = self.track_ptr.f_xy_to_taun(current_state[:2],current_tau)
         
         # self.get_logger().debug("current tau is:{current_tau}")
@@ -187,6 +201,7 @@ class DRCCLPVMPCRos2Main(Node):
         min_n = np.inf
         s1 = np.inf
         s0 = -np.inf
+        min_s0 = np.inf
         box_num = obs_dm.shape[1] // 4
             
         for i in range(box_num):
@@ -205,10 +220,12 @@ class DRCCLPVMPCRos2Main(Node):
             s1 = min(s1, self.s_max)
             s0 = min_s_val - self.carParams['max_vx'] * self.safe_multiplier * self.horizon * self.dt
             s0 = max(s0, 0.1)
+            print("s0:", s0, "s1:", s1)
             
             max_tau_val = self.track_ptr.s_to_tau_lookup(s1)
             if max_tau_val < current_tau:
                 continue
+            min_s0 = min(min_s0, s0)
             if min_tau_val < global_min_tau:
                 global_min_tau = min_tau_val
                 FL, FR, RR, RL = box_i[:,0], box_i[:,1], box_i[:,2], box_i[:,3]
@@ -234,7 +251,8 @@ class DRCCLPVMPCRos2Main(Node):
             cmd_msg = Float32MultiArray()
             cmd_msg.data = [0.0, 0.0, 1.0]
             self.cmd_pub.publish(cmd_msg)
-        elif global_min_tau < np.inf:
+        
+        elif global_min_tau < np.inf and current_s > min_s0 - 5.0:
             refined_FL = self.track_ptr.f_taun_to_xy(max_tau, max_n)
             refined_FR = self.track_ptr.f_taun_to_xy(max_tau, min_n)
             # refined_RR = self.track_ptr.f_taun_to_xy(min_tau, min_n)
@@ -292,6 +310,13 @@ class DRCCLPVMPCRos2Main(Node):
                 reference_x = reference_xyz[0,:]
                 reference_y = reference_xyz[1,:]
                 
+                self.atau_queue.put(self.controller.get_obs_atau())
+                self.btau_queue.put(self.controller.get_obs_btau())
+                self.an_queue.put(self.controller.get_obs_an())
+                self.bn_queue.put(self.controller.get_obs_bn())
+                self.tau0_queue.put(self.controller.get_obs_tau0())
+                self.tau1_queue.put(self.controller.get_obs_tau1())
+
                 ################### store the local reference path for plot ###########
                 ref_x = np.array(reference_x).transpose()
                 ref_y = np.array(reference_y).transpose()
@@ -361,10 +386,10 @@ class DRCCLPVMPCRos2Main(Node):
                         current_control.data = [drcc_control[0,self.control_step],drcc_control[1,self.control_step],0.0]
                     else:
                         current_control.data = [drcc_control[0,self.control_step],0.42,0.0]
-                    if self.approx:
-                        print("steer:", drcc_control[0,self.control_step], "speed:", drcc_control[1,self.control_step])
-                    else:
-                        print("steer:", drcc_control[0,self.control_step], "throttle:", drcc_control[1,self.control_step])
+                    # if self.approx:
+                    #     print("steer:", drcc_control[0,self.control_step], "speed:", drcc_control[1,self.control_step])
+                    # else:
+                    #     print("steer:", drcc_control[0,self.control_step], "throttle:", drcc_control[1,self.control_step])
                     if not self.approx:
                         self.vel_cmd_pub.publish(current_control)
                     else:
@@ -424,14 +449,14 @@ def main(args=None):
     
     
 
-    xylabel_fontsize = 14
-    legend_fontsize = 12
-    xytick_size = 12
+    xylabel_fontsize = 26
+    legend_fontsize = 26
+    xytick_size = 26
     ax.set_xlabel('x [m]',fontsize = xylabel_fontsize)
     ax.set_ylabel('y [m]',fontsize = xylabel_fontsize)
     ax.legend(fontsize=legend_fontsize,borderpad=0.1,labelspacing=0.2, handlelength=1.4, handletextpad=0.37,loc='lower right')
     ax.tick_params(axis='both',which='major',labelsize = xytick_size)
-    ax.figure.set_size_inches(40, 7.5)
+    ax.figure.set_size_inches(10, 10)
     ###################################################################################
     ###################################################################################
     node = DRCCLPVMPCRos2Main()
@@ -439,12 +464,26 @@ def main(args=None):
     Py_data = []
     arrowLength = 0.5
     patch_obs = None
+    prev_patch = None
+    
+    if node.env_map:
+        home_dir = os.path.expanduser("~")
+        pcd_file = os.path.join(home_dir, "Carla-0916", "HDMaps", "Town05.pcd")
+        pcd = o3d.io.read_point_cloud(pcd_file)
+        bbox = o3d.geometry.AxisAlignedBoundingBox(
+        min_bound=(-285, -100, -1),   # x_min, y_min, z_min
+        max_bound=(-150, 70,  1)    # x_max, y_max, z_max
+        )       
+        pcd = pcd.crop(bbox)
+        # --- Downsample to reduce number of points ---
+        voxel_size = 0.8  # meters, adjust as needed
+        pcd = pcd.voxel_down_sample(voxel_size=voxel_size)
+        pts = np.asarray(pcd.points)
+        ax.scatter(pts[:,0], pts[:,1], s=0.1, c='gray', alpha=0.5)
     try:
         while rclpy.ok():
             rclpy.spin_once(node)
-            if patch_obs:
-                patch_obs[0].remove()
-                patch_obs = None
+            
             refx = None
             refy = None
             lpv_x = None
@@ -453,8 +492,22 @@ def main(args=None):
             current_x = None
             current_y = None
             current_phi = None
-            a0 = None
-            b1 = None
+            
+            atau = None
+            btau = None
+            an = None
+            bn = None
+            tau0 = None
+            tau1 = None
+
+            while not node.atau_queue.empty():
+                atau = node.atau_queue.get()
+                btau = node.btau_queue.get()
+                an = node.an_queue.get()
+                bn = node.bn_queue.get()
+                tau0 = node.tau0_queue.get()
+                tau1 = node.tau1_queue.get()
+            
             while not node.track_queue.empty():
                 track_ptr = node.track_queue.get()
                 plot_path(track_ptr,type=1,labels="reference track")
@@ -479,9 +532,18 @@ def main(args=None):
                 lpv_y = node.lpvy_queue.get()
                 
             if rec_obs is not None:
+                
                 x,y = rec_obs.get_rectanglexy()
                 patch_obs = ax.fill(x,y,color='black',zorder=1, alpha=1)
                 
+                if prev_patch is not None:
+                    prev_patch[0].remove()
+                    prev_patch = patch_obs
+            else:
+                if patch_obs is not None:
+                    patch_obs[0].remove()
+                    patch_obs = None
+
             if lpv_x is not None:
                 LnH.set_xdata(lpv_x)
                 LnH.set_ydata(lpv_y)
@@ -497,57 +559,33 @@ def main(args=None):
             LnS.set_xdata(Px_data)
             LnS.set_ydata(Py_data)
             
-            ########################## Draw safety region ##########################
-            if node.rec_obs is not None:
-                a_tau = node.controller.get_obs_atau()
-                a_n = node.controller.get_obs_an()
+            if patch_obs is not None:
+                if atau is not None:
+                    if an > 0:
+                        safe_ataus = ca.linspace(tau0, atau, 10).T
 
-                b_tau = node.controller.get_obs_btau()
-                b_n = node.controller.get_obs_bn()
+                        safe_ans = ca.linspace(0, an, 10).T
 
-                tau_0 = node.controller.get_obs_tau0()
-                tau_1 = node.controller.get_obs_tau1()
-            else:
-                a_tau = None
-                a_n = None
-                b_tau = None
-                b_n = None
-                tau_0 = None
-                tau_1 = None
-            ###################################################################################
-            if a_tau is not None and b_tau is not None and tau_0 is not None and tau_1 is not None:
-                if node.controller.reach_end:
-                    Lna0.set_xdata([])
-                    Lna0.set_ydata([])
-                    Lnb1.set_xdata([])
-                    Lnb1.set_ydata([])
-                elif a_n > 0:
-                    safe_ataus = ca.linspace(tau_0, a_tau, 10).T
+                        safe_axys = node.track_ptr.f_taun_to_xy(safe_ataus,safe_ans)
 
-                    safe_ans = ca.linspace(0, a_n, 10).T
+                        safe_btaus = ca.linspace(btau, tau1, 10).T
 
-                    safe_axys = node.track_ptr.f_taun_to_xy(safe_ataus,safe_ans)
+                        safe_bns = ca.linspace(bn, 0, 10).T
 
-                    safe_btaus = ca.linspace(b_tau, tau_1, 10).T
+                        safe_bxys = node.track_ptr.f_taun_to_xy(safe_btaus,safe_bns)
 
-                    safe_bns = ca.linspace(b_n, 0, 10).T
+                    else:
+                        safe_ataus = ca.linspace(atau, tau0, 10).T
 
-                    safe_bxys = node.track_ptr.f_taun_to_xy(safe_btaus,safe_bns)
+                        safe_ans = ca.linspace(an, 0, 10).T
 
-                else:
-                    safe_ataus = ca.linspace(a_tau, tau_0, 10).T
+                        safe_axys = node.track_ptr.f_taun_to_xy(safe_ataus,safe_ans)
 
-                    safe_ans = ca.linspace(a_n, 0, 10).T
+                        safe_btaus = ca.linspace(tau1, btau, 10).T
 
-                    safe_axys = node.track_ptr.f_taun_to_xy(safe_ataus,safe_ans)
+                        safe_bns = ca.linspace(0, bn, 10).T
 
-                    safe_btaus = ca.linspace(tau_1, b_tau, 10).T
-
-                    safe_bns = ca.linspace(0, b_n, 10).T
-
-                    safe_bxys = node.track_ptr.f_taun_to_xy(safe_btaus,safe_bns)
-                
-                if not node.controller.reach_end:
+                        safe_bxys = node.track_ptr.f_taun_to_xy(safe_btaus,safe_bns)
                     a0 = np.array(safe_axys)
                     b1 = np.array(safe_bxys)
                     
@@ -555,7 +593,11 @@ def main(args=None):
                     Lna0.set_ydata(a0[1,:])
                     Lnb1.set_xdata(b1[0,:])
                     Lnb1.set_ydata(b1[1,:])
-
+            else:
+                Lna0.set_xdata([])
+                Lna0.set_ydata([])
+                Lnb1.set_xdata([])
+                Lnb1.set_ydata([])
             # ax.relim()
             # ax.autoscale_view()
             plt.pause(0.001)

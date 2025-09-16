@@ -50,5 +50,7 @@ drcclpvmpc_main:
     goal_topic: "/goal_pose"
 
     # Below defines the safety distance to the obstacle: safe_multiplier * max_vx
-    safe_multiplier: 4.0
+    safe_multiplier: 3.5
+
+    environment_map: "Town05"
 

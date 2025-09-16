@@ -24,6 +24,8 @@ def generate_launch_description():
              name='carla_lidar_attacher', output='screen', parameters=[cfg]),
         Node(package='carla_vehicle_spawner', executable='carla_camera_attacher',
              name='carla_camera_attacher', output='screen', parameters=[cfg]),
+        Node(package='carla_vehicle_spawner', executable='pcd_loader',
+             name='pcd_loader', output='screen'),
         IncludeLaunchDescription(
                PythonLaunchDescriptionSource(
                     os.path.join(spawn_obstacle_package, 'launch', 'spawn_and_publish.launch.py')

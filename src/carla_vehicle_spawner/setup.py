@@ -31,6 +31,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
     'console_scripts': [
+        'pcd_loader = carla_vehicle_spawner.pcd_loader:main',
         'carla_camera_attacher = carla_vehicle_spawner.carla_camera_attacher:main',
         'lidar_sensor = carla_vehicle_spawner.lidar_sensor:main',
         'car_and_spectator = carla_vehicle_spawner.car_and_spectator:main',

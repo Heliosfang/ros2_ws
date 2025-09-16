@@ -247,7 +247,7 @@ class STM_DRCCLPVMPC:
                 # self.P[4,:] = 0*ca.DM.ones(1,self.horizon).T # sepecify ddelta
             
             self.Q = ca.DM.zeros(self.n_inputs,self.horizon)
-            self.Q[0,:] = 1.0*ca.DM.ones(1,self.horizon)
+            self.Q[0,:] = 0.8*ca.DM.ones(1,self.horizon)
         else:
             self.P[0,-1] = 20 # sepecify x
             self.P[0,-1] = 20 # sepecify y
