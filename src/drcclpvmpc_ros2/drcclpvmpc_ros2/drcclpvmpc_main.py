@@ -74,6 +74,7 @@ class DRCCLPVMPCRos2Main(Node):
         
         ################ load pcd environment map ###############
         self.env_map = all_params.get('environment_map', 'Town05')
+        self.draw_carla_env = all_params.get('draw_calar_env', False)
         
         ################ Ensure continuous phi ##################
         self.prev_odom_phi = None
@@ -355,9 +356,9 @@ class DRCCLPVMPCRos2Main(Node):
                             self.cmd_pub.publish(current_control)
                 else:
                     self.control_step = 0
-                    self.prev_control = self.drcc_control
                     drcc_z0 = np.array(self.drcc_z0).squeeze()
                     drcc_control = np.array(self.drcc_control)
+                    self.prev_control = drcc_control
                     if self.approx:
                         lpv_pvx, lpv_pphi = self.controller.get_old_p_paramVx()
                         lpv_pred_x = self.model.LPV_states(drcc_z0,drcc_control,lpv_pvx,lpv_pphi,self.dt)
@@ -452,11 +453,8 @@ def main(args=None):
     xylabel_fontsize = 26
     legend_fontsize = 26
     xytick_size = 26
-    ax.set_xlabel('x [m]',fontsize = xylabel_fontsize)
-    ax.set_ylabel('y [m]',fontsize = xylabel_fontsize)
-    ax.legend(fontsize=legend_fontsize,borderpad=0.1,labelspacing=0.2, handlelength=1.4, handletextpad=0.37,loc='lower right')
-    ax.tick_params(axis='both',which='major',labelsize = xytick_size)
-    ax.figure.set_size_inches(10, 10)
+    
+    ax.figure.set_size_inches(15, 15)
     ###################################################################################
     ###################################################################################
     node = DRCCLPVMPCRos2Main()
@@ -466,20 +464,24 @@ def main(args=None):
     patch_obs = None
     prev_patch = None
     
-    if node.env_map:
+    if node.env_map and node.draw_carla_env:
         home_dir = os.path.expanduser("~")
         pcd_file = os.path.join(home_dir, "Carla-0916", "HDMaps", "Town05.pcd")
         pcd = o3d.io.read_point_cloud(pcd_file)
         bbox = o3d.geometry.AxisAlignedBoundingBox(
         min_bound=(-285, -100, -1),   # x_min, y_min, z_min
-        max_bound=(-150, 70,  1)    # x_max, y_max, z_max
+        max_bound=(-150, 100,  1)    # x_max, y_max, z_max
         )       
         pcd = pcd.crop(bbox)
         # --- Downsample to reduce number of points ---
         voxel_size = 0.8  # meters, adjust as needed
         pcd = pcd.voxel_down_sample(voxel_size=voxel_size)
         pts = np.asarray(pcd.points)
-        ax.scatter(pts[:,0], pts[:,1], s=0.1, c='gray', alpha=0.5)
+        ax.scatter(pts[:,0], pts[:,1], s=0.1, c='gray', alpha=0.6)
+    ax.set_xlabel('x [m]',fontsize = xylabel_fontsize)
+    ax.set_ylabel('y [m]',fontsize = xylabel_fontsize)
+    ax.legend(fontsize=legend_fontsize,borderpad=0.1,labelspacing=0.2, handlelength=1.4, handletextpad=0.37,loc='lower right')
+    ax.tick_params(axis='both',which='major',labelsize = xytick_size)
     try:
         while rclpy.ok():
             rclpy.spin_once(node)

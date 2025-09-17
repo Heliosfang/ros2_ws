@@ -14,6 +14,18 @@ obstacle_spawner:
       car2:
         blueprint: "vehicle.audi.tt"
         x: -273.014831542969
-        y: -20.430727005004883
+        y: -40.430727005004883
         z: 0.1
         yaw: 90.0
+      car3:
+        blueprint: "vehicle.audi.tt"
+        x: -273.014831542969
+        y: 40.430727005004883
+        z: 0.1
+        yaw: 90.0
+      car4:
+        blueprint: "vehicle.audi.tt"
+        x: -225.7088012695312
+        y: 95.2505874633789
+        z: 0.1
+        yaw: 0.0

@@ -54,3 +54,5 @@ drcclpvmpc_main:
 
     environment_map: "Town05"
 
+    draw_calar_env: true
+
