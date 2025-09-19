@@ -10,8 +10,9 @@ setup(
         ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
         ('share/' + package_name + '/launch', ['launch/spawn_and_publish.launch.py']),
+        ('share/' + package_name + '/launch', ['launch/static_spawn.launch.py']),
         ('share/' + package_name + '/config', ['config/obstacles.yaml']),
-        
+        ('share/' + package_name + '/config', ['config/static_obstacles.yaml']),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -22,6 +23,7 @@ setup(
     entry_points={
         'console_scripts': [
             'spawn_and_publish = obstacle_spawn.spawn_and_publish:main',
+            'static_obstacle_spawn = obstacle_spawn.static_obstacle_spawn:main',
         ],
     },
 )
