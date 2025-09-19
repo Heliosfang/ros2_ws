@@ -547,7 +547,7 @@ def main(args=None):
         ax.scatter(pts[:,0], pts[:,1], s=0.1, c='gray', alpha=0.6)
     ax.set_xlabel('x [m]',fontsize = xylabel_fontsize)
     ax.set_ylabel('y [m]',fontsize = xylabel_fontsize)
-    # ax.legend(fontsize=legend_fontsize,borderpad=0.1,labelspacing=0.2, handlelength=1.4, handletextpad=0.37,loc='lower right',framealpha=1)
+    ax.legend(fontsize=legend_fontsize,borderpad=0.1,labelspacing=0.2, handlelength=1.4, handletextpad=0.37,loc='lower right',framealpha=1)
     ax.tick_params(axis='both',which='major',labelsize = xytick_size)
     try:
         while rclpy.ok():
@@ -603,7 +603,7 @@ def main(args=None):
             while not node.track_queue.empty():
                 track_ptr = node.track_queue.get()
                 plot_path(track_ptr,type=1,labels="Reference Track",ax=ax,linew=2.0)
-                # ax.legend(fontsize=legend_fontsize,borderpad=0.1,labelspacing=0.2, handlelength=1.4, handletextpad=0.37,loc='lower right',framealpha=1)
+                ax.legend(fontsize=legend_fontsize,borderpad=0.1,labelspacing=0.2, handlelength=1.4, handletextpad=0.37,loc='lower right',framealpha=1)
 
                 
                 
