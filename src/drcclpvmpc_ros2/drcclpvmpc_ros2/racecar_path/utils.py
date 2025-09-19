@@ -5,7 +5,7 @@ import numpy as np
 from casadi import Slice
 import os
 
-def plot_path(path_ptr,type,labels=None,linew = 0.5):
+def plot_path(path_ptr,type,labels=None,linew = 0.5, ax=None):
     """ type = 1: plot racecar path
         type = 2: plot virtual running path
         type = 3: plot optimized path"""
@@ -18,9 +18,12 @@ def plot_path(path_ptr,type,labels=None,linew = 0.5):
 
         ptr_x = np.array(ptr_xy[0,Slice()]).reshape((-1))
         ptr_y = np.array(ptr_xy[1,Slice()]).reshape((-1))
-
-        plt.plot(ptr_x,ptr_y,label=labels, color="green",linewidth=linew,zorder=0)
-        plt.legend()
+        if ax is None:
+            plt.plot(ptr_x,ptr_y,label=labels, color="green",linewidth=linew,zorder=0)
+            plt.legend()
+            
+        else:
+            ax.plot(ptr_x,ptr_y,label=labels, color="green",linewidth=linew,zorder=0)
 
     elif type==2:
         virtual_path = path_ptr

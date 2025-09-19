@@ -6,8 +6,11 @@ from casadi import DM
 
 import rclpy
 from rclpy.node import Node
+from nav_msgs.msg import Path
+from visualization_msgs.msg import Marker
 
 from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import Quaternion
 from nav_msgs.msg import Odometry, Path
 from nav_msgs.srv import GetPlan
 from std_msgs.msg import Float32MultiArray
@@ -65,6 +68,7 @@ class DRCCLPVMPCRos2Main(Node):
         self.controller = None
         self.test_bug = False
         self.s_max = np.inf
+        self.tau_max = np.inf
         self.drcc_success = None
         self.drcc_z0 = None
         self.drcc_control = None
@@ -74,7 +78,7 @@ class DRCCLPVMPCRos2Main(Node):
         
         ################ load pcd environment map ###############
         self.env_map = all_params.get('environment_map', 'Town05')
-        self.draw_carla_env = all_params.get('draw_calar_env', False)
+        self.draw_carla_env = all_params.get('draw_carla_env', False)
         
         ################ Ensure continuous phi ##################
         self.prev_odom_phi = None
@@ -88,6 +92,8 @@ class DRCCLPVMPCRos2Main(Node):
         self.refx_queue = queue.Queue()
         self.refy_queue = queue.Queue()
         self.P_queue = queue.Queue()
+        self.curS_queue = queue.Queue()
+        self.curTau_queue = queue.Queue()
         
         self.atau_queue = queue.Queue()
         self.btau_queue = queue.Queue()
@@ -95,6 +101,11 @@ class DRCCLPVMPCRos2Main(Node):
         self.bn_queue = queue.Queue()
         self.tau0_queue = queue.Queue()
         self.tau1_queue = queue.Queue()
+        
+        self.obs_centerxy = queue.Queue()
+        self.obs_centerphi = queue.Queue()
+        self.obs_centerL = queue.Queue()
+        self.obs_centerW = queue.Queue()
         
         ###################################################################################
         ###################################################################################
@@ -106,11 +117,22 @@ class DRCCLPVMPCRos2Main(Node):
         # Publisher (combined [steering, throttle, brake])
         self.cmd_pub = self.create_publisher(Float32MultiArray, "/control_cmd", 10)
         
-        # Publisher (combined [steering, vx, brake])
+        # Publisher (combined [steering, vx, brake])BicycleDynamics
         self.vel_cmd_pub = self.create_publisher(Float32MultiArray, "/velocity_cmd", 10)
+        
+        # Publisher (visualization of the reference path)
+        self.path_pub = self.create_publisher(Path, "/global_Path", 10)
+        
+        # Publisher (visualization of the obstacle)
+        self.obs_pub = self.create_publisher(Marker, "/obstacle_marker", 10)
+        
+        # Publisher (visualization of the car mesh)
+        self.car_pub = self.create_publisher(Marker, "/car_marker", 10)
 
         # Service client
         self.plan_client = self.create_client(GetPlan, self.services_name)
+        
+
 
         self.get_logger().info(
             f"DRCC-LPVMPC node initialized. Subscribed to /odom, {self.goal_topic}, /obs_box. "
@@ -184,7 +206,10 @@ class DRCCLPVMPCRos2Main(Node):
             current_state = self.current_state
             self.P_queue.put(current_state[0:3])
         current_tau = self.track_ptr.xy_to_tau(current_state[:2])
-        current_s = float(self.track_ptr.tau_to_s_lookup(current_tau))
+        current_s = self.track_ptr.tau_to_s_lookup(current_tau)
+        self.curTau_queue.put(current_tau)
+        self.curS_queue.put(current_s)
+        current_s = float(current_s)
         # current_n = self.track_ptr.f_xy_to_taun(current_state[:2],current_tau)
         
         # self.get_logger().debug("current tau is:{current_tau}")
@@ -221,7 +246,7 @@ class DRCCLPVMPCRos2Main(Node):
             s1 = min(s1, self.s_max)
             s0 = min_s_val - self.carParams['max_vx'] * self.safe_multiplier * self.horizon * self.dt
             s0 = max(s0, 0.1)
-            print("s0:", s0, "s1:", s1)
+            # print("s0:", s0, "s1:", s1)
             
             max_tau_val = self.track_ptr.s_to_tau_lookup(s1)
             if max_tau_val < current_tau:
@@ -276,6 +301,10 @@ class DRCCLPVMPCRos2Main(Node):
                 delta = np.arctan2(np.sin(center_phi - self.prev_rec_phi), np.cos(center_phi - self.prev_rec_phi))
                 center_phi = self.prev_rec_phi + delta
             self.prev_rec_phi = center_phi
+            self.obs_centerxy.put(center_xy)
+            self.obs_centerphi.put(center_phi)
+            self.obs_centerL.put(length)
+            self.obs_centerW.put(width)
             self.rec_obs = Rectangle_obs(center_xy, float(width), float(length), center_phi*180/ca.pi, side_avoid)
             self.obs_queue.put(self.rec_obs)
             # self.get_logger().info(f"Received obstacle at tau range [{min_tau}, {max_tau}] on side {side_avoid}.")
@@ -418,6 +447,7 @@ class DRCCLPVMPCRos2Main(Node):
             # plot_path(self.track_ptr,type=1,labels="reference track")
             self.track_queue.put(self.track_ptr)
             self.s_max = self.track_ptr.get_max_length()
+            self.tau_max = self.track_ptr.get_max_tau()
             start_tau = 1
             start_pt = self.track_ptr.f_taun_to_xy(start_tau, 0.0)
             start_phi = self.track_ptr.f_phi(start_tau)[0]
@@ -431,6 +461,34 @@ class DRCCLPVMPCRos2Main(Node):
             self.initialized = True
         self.get_logger().info(f"Received plan with {N} poses; DM shape = {latest_path_dm.shape}.")
         
+def quat_mul(q1, q2):
+    x1,y1,z1,w1 = q1
+    x2,y2,z2,w2 = q2
+    return (
+        w1*x2 + x1*w2 + y1*z2 - z1*y2,
+        w1*y2 - x1*z2 + y1*w2 + z1*x2,
+        w1*z2 + x1*y2 - y1*x2 + z1*w2,
+        w1*w2 - x1*x2 - y1*y2 - z1*z2,
+    )
+def yaw_to_quaternion(yaw) -> Quaternion:
+    q = Quaternion()
+    q.w = math.cos(yaw / 2)
+    q.x = 0.0
+    q.y = 0.0
+    q.z = math.sin(yaw / 2)
+    return q
+
+def quat_from_yaw(yaw_rad):
+    s, c = math.sin(yaw_rad/2.0), math.cos(yaw_rad/2.0)
+    return (0.0, 0.0, s, c)  # (x,y,z,w)
+
+def shift_position(x, y, yaw, dx_local, dy_local):
+    """Shift (dx,dy) in car's local frame into world coordinates."""
+    c, s = math.cos(yaw), math.sin(yaw)
+    dx_world = dx_local * c - dy_local * s
+    dy_world = dx_local * s + dy_local * c
+    return x + dx_world, y + dy_world
+        
 def main(args=None):
     rclpy.init(args=args)
     
@@ -441,17 +499,15 @@ def main(args=None):
     plt.ion()
     
     LnS, = ax.plot([], [], 'r',alpha=1,lw=2,label="Trajectory")
-    LnR, = ax.plot([], [], '-b', marker='o', markersize=1, lw=1,label="Local Reference")
-    LnP, = ax.plot([], [], 'g', marker='o', alpha=0.5, markersize=5,label="current position")
-    LnO, = ax.plot([],[],lw =2, color = "tab:blue",label = "Orientation")
-    LnH, = ax.plot([], [], '-g', marker='o', markersize=1, lw=0.5)
-    Lna0, = ax.plot([], [], lw = 1, ls='--', color='black')
-    Lnb1, = ax.plot([], [], lw = 1, ls='--', color='black')
-    
-    
+    LnR, = ax.plot([], [], '-b', marker='o', markersize=1, lw=2,label="Reference Path")
+    LnP, = ax.plot([], [], '-o',color = "yellow",lw=2)
+    LnO, = ax.plot([],[],lw = 2, color = "tab:blue")
+    LnH, = ax.plot([], [], color = "orange", marker='o', markersize=2, lw=2,label="Predicted Path")
+    Lna0, = ax.plot([], [], lw = 2, ls='--', color='black', label = "Satety Region")
+    Lnb1, = ax.plot([], [], lw = 2, ls='--', color='black')
 
     xylabel_fontsize = 26
-    legend_fontsize = 26
+    legend_fontsize = 36
     xytick_size = 26
     
     ax.figure.set_size_inches(15, 15)
@@ -463,6 +519,17 @@ def main(args=None):
     arrowLength = 0.5
     patch_obs = None
     prev_patch = None
+    q_pitch = (0.0, math.sin(-math.pi/4), 0.0, math.cos(-math.pi/4))
+    q_roll = (math.sin(-math.pi/4), 0.0, 0.0, math.cos(-math.pi/4))
+    
+    # cur_dir = os.path.dirname(os.path.abspath(__file__))
+    # upper_dir = os.path.dirname(cur_dir)
+    # mesh_path = os.path.join(upper_dir, 'meshes', 'Audi_R8_2017.stl')
+    # home_dir = os.path.expanduser("~")
+
+    # mesh_path = os.path.join(home_dir, 'ros2_ws', 'src/drcclpvmpc_ros2/meshes', 'Audi_R8_2017.stl')
+
+    # print("car mesh path:", mesh_path)
     
     if node.env_map and node.draw_carla_env:
         home_dir = os.path.expanduser("~")
@@ -480,7 +547,7 @@ def main(args=None):
         ax.scatter(pts[:,0], pts[:,1], s=0.1, c='gray', alpha=0.6)
     ax.set_xlabel('x [m]',fontsize = xylabel_fontsize)
     ax.set_ylabel('y [m]',fontsize = xylabel_fontsize)
-    ax.legend(fontsize=legend_fontsize,borderpad=0.1,labelspacing=0.2, handlelength=1.4, handletextpad=0.37,loc='lower right')
+    # ax.legend(fontsize=legend_fontsize,borderpad=0.1,labelspacing=0.2, handlelength=1.4, handletextpad=0.37,loc='lower right',framealpha=1)
     ax.tick_params(axis='both',which='major',labelsize = xytick_size)
     try:
         while rclpy.ok():
@@ -494,6 +561,9 @@ def main(args=None):
             current_x = None
             current_y = None
             current_phi = None
+            current_s = None
+            current_tau = None
+            N = None
             
             atau = None
             btau = None
@@ -501,7 +571,27 @@ def main(args=None):
             bn = None
             tau0 = None
             tau1 = None
-
+            
+            obs_centerxy = None
+            obs_centerphi = None
+            obs_centerL = None
+            obs_centerW = None
+            while not node.curS_queue.empty():
+                current_s = node.curS_queue.get()
+                current_tau = node.curTau_queue.get()
+                max_s = node.s_max
+                N = 10*int((max_s - current_s)/ (  node.carParams['max_vx']*node.dt ))
+                if N < 1:
+                    N = 1
+                    # current_s = None
+                    # current_tau = None
+                
+            while not node.obs_centerxy.empty():
+                obs_centerxy = node.obs_centerxy.get()
+                obs_centerphi = node.obs_centerphi.get()
+                obs_centerL = node.obs_centerL.get()
+                obs_centerW = node.obs_centerW.get()
+                
             while not node.atau_queue.empty():
                 atau = node.atau_queue.get()
                 btau = node.btau_queue.get()
@@ -512,7 +602,10 @@ def main(args=None):
             
             while not node.track_queue.empty():
                 track_ptr = node.track_queue.get()
-                plot_path(track_ptr,type=1,labels="reference track")
+                plot_path(track_ptr,type=1,labels="Reference Track",ax=ax,linew=2.0)
+                # ax.legend(fontsize=legend_fontsize,borderpad=0.1,labelspacing=0.2, handlelength=1.4, handletextpad=0.37,loc='lower right',framealpha=1)
+
+                
                 
             while not node.obs_queue.empty():
                 rec_obs = node.obs_queue.get()
@@ -541,10 +634,39 @@ def main(args=None):
                 if prev_patch is not None:
                     prev_patch[0].remove()
                     prev_patch = patch_obs
+                
+                ########### visualize the obstacle in rviz2 ################
+                marker = Marker()
+                marker.header.frame_id = "map"
+                marker.header.stamp = node.get_clock().now().to_msg()
+                marker.ns = "obstacle"
+                marker.id = 0
+                marker.type = Marker.CUBE
+                marker.action = Marker.ADD
+                marker.pose.position.x = float(obs_centerxy[0])
+                marker.pose.position.y = float(obs_centerxy[1])
+                marker.pose.position.z = 0.5
+                q = yaw_to_quaternion(float(obs_centerphi))
+                marker.pose.orientation = q
+                marker.scale.x = float(obs_centerL)
+                marker.scale.y = float(obs_centerW)
+                marker.scale.z = 1.0
+                marker.color.a = 0.8
+                marker.color.r = 1.0
+                marker.color.g = 0.0
+                marker.color.b = 0.0
+                node.obs_pub.publish(marker)
             else:
                 if patch_obs is not None:
                     patch_obs[0].remove()
                     patch_obs = None
+                m = Marker()
+                m.header.frame_id = "map"
+                m.header.stamp = node.get_clock().now().to_msg()
+                m.ns = "obstacle"
+                m.id = 0
+                m.action = Marker.DELETE
+                node.obs_pub.publish(m)
 
             if lpv_x is not None:
                 LnH.set_xdata(lpv_x)
@@ -554,12 +676,57 @@ def main(args=None):
                 LnP.set_xdata([current_x])
                 LnP.set_ydata([current_y])
                 LnO.set_data([current_x, current_x+arrowLength*np.cos(current_phi)],[current_y, current_y+arrowLength*np.sin(current_phi)])
+                car = Marker()
+                car.header.frame_id = "map"
+                car.header.stamp = node.get_clock().now().to_msg()
+                car.ns = "car"
+                car.id = 0
+                car.type = Marker.MESH_RESOURCE
+                car.mesh_resource = "package://drcclpvmpc_ros2/meshes/DeLorean.STL"
+                car.action = Marker.ADD
+                current_phi = float(current_phi + np.pi/2.0)
+                x_new, y_new = shift_position(float(current_x), float(current_y), current_phi, -1.0, -2.0)
+                car.pose.position.x = x_new
+                car.pose.position.y = y_new
+                car.pose.position.z = 0.5
                 
+                q = quat_from_yaw(current_phi)
+                qx,qy,qz,qw = quat_mul(q, q_roll)
+                car.pose.orientation.x = qx
+                car.pose.orientation.y = qy
+                car.pose.orientation.z = qz
+                car.pose.orientation.w = qw
+                car.scale.x = 0.05
+                car.scale.y = 0.05
+                car.scale.z = -0.05
+
+                car.color.r, car.color.g, car.color.b, car.color.a = (0.2, 0.3, 0.9, 0.8)
+                node.car_pub.publish(car)
+
+
             if refx is not None:
                 LnR.set_xdata(refx)
                 LnR.set_ydata(refy)
             LnS.set_xdata(Px_data)
             LnS.set_ydata(Py_data)
+            
+            if current_s is not None:
+                max_tau = node.tau_max
+                tau_arr = ca.linspace(current_tau, max_tau, N).T
+                path_xy = np.array(node.track_ptr.f_taun_to_xy(tau_arr,0.0)).transpose()
+                # print("path xy :", path_xy)
+                path_msg = Path()
+                path_msg.header.frame_id = "map"
+                path_msg.header.stamp = node.get_clock().now().to_msg()
+                for p in path_xy:
+                    pose = PoseStamped()
+                    pose.header.frame_id = "map"
+                    pose.pose.position.x = float(p[0])
+                    pose.pose.position.y = float(p[1])
+                    pose.pose.position.z = 0.0
+                    pose.pose.orientation.w = 1.0
+                    path_msg.poses.append(pose)
+                node.path_pub.publish(path_msg)
             
             if patch_obs is not None:
                 if atau is not None:

@@ -9,8 +9,11 @@ Panels:
         - /Grid1
         - /PointCloud21
         - /PointCloud22
+        - /Path1
+        - /Path1/Offset1
+        - /Marker1
       Splitter Ratio: 0.5
-    Tree Height: 276
+    Tree Height: 1812
   - Class: rviz_common/Selection
     Name: Selection
   - Class: rviz_common/Tool Properties
@@ -79,9 +82,9 @@ Visualization Manager:
       Enabled: true
       Invert Rainbow: false
       Max Color: 255; 255; 255
-      Max Intensity: 0.9897751212120056
+      Max Intensity: 0.9897752404212952
       Min Color: 0; 0; 0
-      Min Intensity: 0.4497360587120056
+      Min Intensity: 0.45091956853866577
       Name: PointCloud2
       Position Transformer: XYZ
       Selectable: true
@@ -169,6 +172,74 @@ Visualization Manager:
       Use Fixed Frame: true
       Use rainbow: true
       Value: true
+    - Alpha: 2
+      Buffer Length: 1
+      Class: rviz_default_plugins/Path
+      Color: 25; 255; 0
+      Enabled: true
+      Head Diameter: 0.30000001192092896
+      Head Length: 0.20000000298023224
+      Length: 0.30000001192092896
+      Line Style: Billboards
+      Line Width: 0.20000000298023224
+      Name: Path
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0
+      Pose Color: 255; 85; 255
+      Pose Style: None
+      Radius: 0.029999999329447746
+      Shaft Diameter: 0.10000000149011612
+      Shaft Length: 0.10000000149011612
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /global_Path
+      Value: true
+    - Class: rviz_default_plugins/Marker
+      Enabled: true
+      Name: Marker
+      Namespaces:
+        {}
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /car_marker
+      Value: true
+    - Class: rviz_default_plugins/Marker
+      Enabled: true
+      Name: Marker
+      Namespaces:
+        obstacle: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /obstacle_marker
+      Value: true
+    - Class: rviz_default_plugins/Image
+      Enabled: true
+      Max Value: 1
+      Median window: 5
+      Min Value: 0
+      Name: Image
+      Normalize Range: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /carla/camera/image
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
@@ -178,21 +249,6 @@ Visualization Manager:
   Tools:
     - Class: rviz_default_plugins/Interact
       Hide Inactive Objects: true
-    - Class: rviz_default_plugins/MoveCamera
-    - Class: rviz_default_plugins/Select
-    - Class: rviz_default_plugins/FocusCamera
-    - Class: rviz_default_plugins/Measure
-      Line color: 128; 128; 0
-    - Class: rviz_default_plugins/SetInitialPose
-      Covariance x: 0.25
-      Covariance y: 0.25
-      Covariance yaw: 0.06853891909122467
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /initialpose
     - Class: rviz_default_plugins/SetGoal
       Topic:
         Depth: 5
@@ -215,25 +271,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/ThirdPersonFollower
-      Distance: 33.95810317993164
+      Distance: 60.095279693603516
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 1.483673095703125
-        Y: 0.5490875244140625
-        Z: -0.03357751667499542
+        X: 1.1852760314941406
+        Y: 2.8532702922821045
+        Z: -0.03358514606952667
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: true
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.37479671835899353
+      Pitch: 0.384796679019928
       Target Frame: base_link
       Value: ThirdPersonFollower (rviz_default_plugins)
-      Yaw: 3.1592204570770264
+      Yaw: 3.094219446182251
     Saved:
       - Class: rviz_default_plugins/ThirdPersonFollower
         Distance: 33.95810317993164
@@ -255,15 +311,55 @@ Visualization Manager:
         Target Frame: base_link
         Value: ThirdPersonFollower (rviz_default_plugins)
         Yaw: 3.1592204570770264
+      - Class: rviz_default_plugins/ThirdPersonFollower
+        Distance: 39.12767791748047
+        Enable Stereo Rendering:
+          Stereo Eye Separation: 0.05999999865889549
+          Stereo Focal Distance: 1
+          Swap Stereo Eyes: false
+          Value: false
+        Focal Point:
+          X: 1.483673095703125
+          Y: 0.5490875244140625
+          Z: -0.03357751667499542
+        Focal Shape Fixed Size: true
+        Focal Shape Size: 0.05000000074505806
+        Invert Z Axis: true
+        Name: ThirdPersonFollower
+        Near Clip Distance: 0.009999999776482582
+        Pitch: 0.384796679019928
+        Target Frame: base_link
+        Value: ThirdPersonFollower (rviz_default_plugins)
+        Yaw: 3.094219446182251
+      - Class: rviz_default_plugins/ThirdPersonFollower
+        Distance: 60.973297119140625
+        Enable Stereo Rendering:
+          Stereo Eye Separation: 0.05999999865889549
+          Stereo Focal Distance: 1
+          Swap Stereo Eyes: false
+          Value: false
+        Focal Point:
+          X: 1.1852760314941406
+          Y: 2.8532702922821045
+          Z: -0.03358514606952667
+        Focal Shape Fixed Size: true
+        Focal Shape Size: 0.05000000074505806
+        Invert Z Axis: true
+        Name: ThirdPersonFollower
+        Near Clip Distance: 0.009999999776482582
+        Pitch: 0.384796679019928
+        Target Frame: base_link
+        Value: ThirdPersonFollower (rviz_default_plugins)
+        Yaw: 3.094219446182251
 Window Geometry:
   Displays:
-    collapsed: false
-  Height: 1477
-  Hide Left Dock: false
+    collapsed: true
+  Height: 2086
+  Hide Left Dock: true
   Hide Right Dock: true
   Image:
     collapsed: false
-  QMainWindow State: 000000ff00000000fd000000040000000000000588000004bbfc0200000009fb0000001200530065006c0065006300740069006f006e00000001e10000009b000000b200fffffffb0000001e0054006f006f006c002000500072006f007000650072007400690065007302000001ed000001df00000185000000a3fb000000120056006900650077007300200054006f006f02000001df000002110000018500000122fb000000200054006f006f006c002000500072006f0070006500720074006900650073003203000002880000011d000002210000017afb000000100044006900730070006c0061007900730100000070000001860000018600fffffffb0000002000730065006c0065006300740069006f006e00200062007500660066006500720200000138000000aa0000023a00000294fb00000014005700690064006500530074006500720065006f02000000e6000000d2000003ee0000030bfb0000000c004b0069006e0065006300740200000186000001060000030c00000261fb0000000a0049006d0061006700650100000202000003290000002800ffffff0000000100000381000004bbfc0200000003fb0000001e0054006f006f006c002000500072006f00700065007200740069006500730100000041000000780000000000000000fb0000000a005600690065007700730000000070000004bb0000013800fffffffb0000001200530065006c0065006300740069006f006e010000025a000000b200000000000000000000000200000490000000a9fc0100000001fb0000000a00560069006500770073030000004e00000080000002e1000001970000000300000c600000005efc0100000002fb0000000800540069006d0065010000000000000c600000047a00fffffffb0000000800540069006d00650100000000000004500000000000000000000006cc000004bb00000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
+  QMainWindow State: 000000ff00000000fd00000004000000000000058800000786fc020000000afb0000001200530065006c0065006300740069006f006e00000001e10000009b000000b200fffffffb0000001e0054006f006f006c002000500072006f007000650072007400690065007302000001ed000001df00000185000000a3fb000000120056006900650077007300200054006f006f02000001df000002110000018500000122fb000000200054006f006f006c002000500072006f0070006500720074006900650073003203000002880000011d000002210000017afb000000100044006900730070006c0061007900730000000070000007860000018600fffffffb0000002000730065006c0065006300740069006f006e00200062007500660066006500720200000138000000aa0000023a00000294fb00000014005700690064006500530074006500720065006f02000000e6000000d2000003ee0000030bfb0000000c004b0069006e0065006300740200000186000001060000030c00000261fb0000000a0049006d006100670065030000000000000000000006c800000410fb0000000a0049006d006100670065020000000800000009000006bf000003f4000000010000038100000786fc0200000003fb0000001e0054006f006f006c002000500072006f00700065007200740069006500730100000041000000780000000000000000fb0000000a005600690065007700730000000070000007860000013800fffffffb0000001200530065006c0065006300740069006f006e010000025a000000b200000000000000000000000200000490000000a9fc0100000001fb0000000a00560069006500770073030000004e00000080000002e10000019700000003000008370000005efc0100000002fb0000000800540069006d00650000000000000008370000047a00fffffffb0000000800540069006d00650100000000000004500000000000000000000008370000078600000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
   Selection:
     collapsed: false
   Time:
@@ -272,6 +368,6 @@ Window Geometry:
     collapsed: false
   Views:
     collapsed: true
-  Width: 3168
-  X: 4314
-  Y: 127
+  Width: 2103
+  X: 1737
+  Y: 0

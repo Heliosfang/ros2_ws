@@ -13,6 +13,10 @@ setup(
         ('share/' + package_name + '/launch', ['launch/drcclpvmpc_planner.launch.py']),
         ('share/' + package_name + '/config', ['config/lincoln_planner.yaml']),
         ('share/' + package_name + '/config', ['config/planner_view.rviz']),
+        ('share/' + package_name + '/meshes', ['meshes/Audi R8.dae']),
+        ('share/' + package_name + '/meshes', ['meshes/Audi_R8_2017.stl']),
+        ('share/' + package_name + '/meshes', ['meshes/DeLorean.STL']),
+        
         ('lib/' + 'python3.12/' + 'site-packages/' + package_name + '/mpc' +
          '/data', [package_name + '/mpc/data/model_error.csv']),
         ('lib/' + 'python3.12/' + 'site-packages/' + package_name + '/mpc' +
@@ -23,6 +27,11 @@ setup(
          '/data', [package_name + '/mpc/data/noise_arrvx.npy']),
         ('lib/' + 'python3.12/' + 'site-packages/' + package_name + '/mpc' +
          '/output', [package_name + '/mpc/output/DynamicDRO_solver_output.txt']),
+        ('lib/' + 'python3.12/' + 'site-packages/' + 'meshes', ['meshes/Audi R8.dae']),
+        ('lib/' + 'python3.12/' + 'site-packages/' + 'meshes', ['meshes/Audi_R8_2017.stl']),
+        ('lib/' + 'python3.12/' + 'site-packages/' + 'meshes', ['meshes/DeLorean.STL']),
+        
+        
         
     ],
     install_requires=['setuptools'],
