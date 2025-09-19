@@ -547,7 +547,7 @@ def main(args=None):
         ax.scatter(pts[:,0], pts[:,1], s=0.1, c='gray', alpha=0.6)
     ax.set_xlabel('x [m]',fontsize = xylabel_fontsize)
     ax.set_ylabel('y [m]',fontsize = xylabel_fontsize)
-    ax.legend(fontsize=legend_fontsize,borderpad=0.1,labelspacing=0.2, handlelength=1.4, handletextpad=0.37,loc='lower right',framealpha=1)
+    # ax.legend(fontsize=legend_fontsize,borderpad=0.1,labelspacing=0.2, handlelength=1.4, handletextpad=0.37,loc='lower right',framealpha=1)
     ax.tick_params(axis='both',which='major',labelsize = xytick_size)
     try:
         while rclpy.ok():
@@ -580,7 +580,7 @@ def main(args=None):
                 current_s = node.curS_queue.get()
                 current_tau = node.curTau_queue.get()
                 max_s = node.s_max
-                N = 10*int((max_s - current_s)/ (  node.carParams['max_vx']*node.dt ))
+                N = int((max_s - current_s)/ (  node.carParams['max_vx']*node.dt ))
                 if N < 1:
                     N = 1
                     # current_s = None
@@ -603,7 +603,7 @@ def main(args=None):
             while not node.track_queue.empty():
                 track_ptr = node.track_queue.get()
                 plot_path(track_ptr,type=1,labels="Reference Track",ax=ax,linew=2.0)
-                ax.legend(fontsize=legend_fontsize,borderpad=0.1,labelspacing=0.2, handlelength=1.4, handletextpad=0.37,loc='lower right',framealpha=1)
+                # ax.legend(fontsize=legend_fontsize,borderpad=0.1,labelspacing=0.2, handlelength=1.4, handletextpad=0.37,loc='lower right',framealpha=1)
 
                 
                 
@@ -682,13 +682,13 @@ def main(args=None):
                 car.ns = "car"
                 car.id = 0
                 car.type = Marker.MESH_RESOURCE
-                car.mesh_resource = "package://drcclpvmpc_ros2/meshes/DeLorean.STL"
+                car.mesh_resource = "package://drcclpvmpc_ros2/meshes/Car1 v2.stl"
                 car.action = Marker.ADD
-                current_phi = float(current_phi + np.pi/2.0)
-                x_new, y_new = shift_position(float(current_x), float(current_y), current_phi, -1.0, -2.0)
+                current_phi = float(current_phi + np.pi)
+                x_new, y_new = shift_position(float(current_x), float(current_y), current_phi, -2.0, 1.0)
                 car.pose.position.x = x_new
                 car.pose.position.y = y_new
-                car.pose.position.z = 0.5
+                car.pose.position.z = -0.75
                 
                 q = quat_from_yaw(current_phi)
                 qx,qy,qz,qw = quat_mul(q, q_roll)
@@ -696,9 +696,9 @@ def main(args=None):
                 car.pose.orientation.y = qy
                 car.pose.orientation.z = qz
                 car.pose.orientation.w = qw
-                car.scale.x = 0.05
-                car.scale.y = 0.05
-                car.scale.z = -0.05
+                car.scale.x = 0.1
+                car.scale.y = 0.1
+                car.scale.z = -0.1
 
                 car.color.r, car.color.g, car.color.b, car.color.a = (0.2, 0.3, 0.9, 0.8)
                 node.car_pub.publish(car)

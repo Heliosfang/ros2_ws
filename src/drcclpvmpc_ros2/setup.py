@@ -16,6 +16,8 @@ setup(
         ('share/' + package_name + '/meshes', ['meshes/Audi R8.dae']),
         ('share/' + package_name + '/meshes', ['meshes/Audi_R8_2017.stl']),
         ('share/' + package_name + '/meshes', ['meshes/DeLorean.STL']),
+        ('share/' + package_name + '/meshes', ['meshes/Car1 v2.stl']),
+
         
         ('lib/' + 'python3.12/' + 'site-packages/' + package_name + '/mpc' +
          '/data', [package_name + '/mpc/data/model_error.csv']),
@@ -30,9 +32,9 @@ setup(
         ('lib/' + 'python3.12/' + 'site-packages/' + 'meshes', ['meshes/Audi R8.dae']),
         ('lib/' + 'python3.12/' + 'site-packages/' + 'meshes', ['meshes/Audi_R8_2017.stl']),
         ('lib/' + 'python3.12/' + 'site-packages/' + 'meshes', ['meshes/DeLorean.STL']),
-        
-        
-        
+        ('lib/' + 'python3.12/' + 'site-packages/' + 'meshes', ['meshes/Car1 v2.stl']),
+
+
     ],
     install_requires=['setuptools'],
     zip_safe=True,
