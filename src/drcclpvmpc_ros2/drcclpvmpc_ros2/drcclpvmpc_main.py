@@ -79,6 +79,7 @@ class DRCCLPVMPCRos2Main(Node):
         ################ load pcd environment map ###############
         self.env_map = all_params.get('environment_map', 'Town05')
         self.draw_carla_env = all_params.get('draw_carla_env', False)
+        self.carla_simulation = all_params.get('carla_simulation', False)
         
         ################ Ensure continuous phi ##################
         self.prev_odom_phi = None
@@ -412,18 +413,20 @@ class DRCCLPVMPCRos2Main(Node):
                         self.controller.update_new_p_param(new_pvx,new_pvy,new_pphi)
                     
                     current_control = Float32MultiArray()
-                    if not self.approx:
-                        current_control.data = [drcc_control[0,self.control_step],drcc_control[1,self.control_step],0.0]
-                    else:
+                    if self.carla_simulation:
                         current_control.data = [drcc_control[0,self.control_step],0.42,0.0]
+                    else:
+                        current_control.data = [drcc_control[0,self.control_step],drcc_control[1,self.control_step],0.0]
                     # if self.approx:
                     #     print("steer:", drcc_control[0,self.control_step], "speed:", drcc_control[1,self.control_step])
                     # else:
                     #     print("steer:", drcc_control[0,self.control_step], "throttle:", drcc_control[1,self.control_step])
-                    if not self.approx:
-                        self.vel_cmd_pub.publish(current_control)
-                    else:
+                    if self.carla_simulation:
                         self.cmd_pub.publish(current_control)
+                    elif not self.approx:
+                        self.cmd_pub.publish(current_control)
+                    else:
+                        self.vel_cmd_pub.publish(current_control)
 
     # ------------------- Service response handler -------------------
     def _on_plan_response(self, future):
