@@ -1,0 +1,36 @@
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_common/TF
+      Enabled: true
+      Name: TF
+    - Class: rviz_default_plugins/Map
+      Enabled: true
+      Name: Costmap
+      Topic:
+        Value: /local_costmap/costmap
+      Draw Behind: false
+      Color Scheme: map
+      Alpha: 0.7
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: Rectangles
+      Topic:
+        Value: /rectangle_markers
+  Global Options:
+    Fixed Frame: map
+  Tools:
+    - Class: rviz_default_plugins/Interact
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+    - Class: rviz_default_plugins/Measure
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 10
+      Focal Point:
+        X: 2.0
+        Y: 2.0
+        Z: 0.0
+      Pitch: 0.8
+      Yaw: 0.0
