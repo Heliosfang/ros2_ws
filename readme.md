@@ -97,6 +97,12 @@ In the simulation we just make the global path server give the path message by r
 
 Demo video can be found in:
 
+
+
+https://github.com/user-attachments/assets/b7559c96-fc5f-4104-b067-f7d48d14409c
+
+
+
 ▶️ [Watch Demo](https://drive.google.com/file/d/1AYFfqVLeKRJNjaqzqaHhxtrmDxbeSRML/view?usp=sharing)
 
 ## Build your own configuration
